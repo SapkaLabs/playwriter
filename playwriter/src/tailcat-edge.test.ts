@@ -5,10 +5,11 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { resolve, join } from 'node:path'
 import { spawn } from 'node:child_process'
-import { execFile } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
+import { WebSocket } from 'ws'
 import { promisify } from 'node:util'
 import { connectTailcat } from './tailcat-controller.js'
-import { writeFile } from 'node:fs/promises'
+import { writeFile, readFile } from 'node:fs/promises'
 import { mkdir } from 'node:fs/promises'
 import { startTailcatFixture } from './tailcat-fixture.js'
 import { FramedStream, PUBLIC_DERP_MAP, MAX_CHUNK } from './tailcat-protocol.js'
@@ -45,6 +46,28 @@ it.runIf(process.env.PLAYWRITER_TAILCAT_TESTS === '1')(
       ],
     })
     let native: ReturnType<typeof spawn> | undefined
+    const deniedUpgrade = (url: string) =>
+      new Promise<number>((ok, reject) => {
+        const socket = new WebSocket(url)
+        const timer = setTimeout(() => {
+          socket.terminate()
+          reject(new Error('Upgrade probe timed out'))
+        }, 5000)
+        socket.once('unexpected-response', (_request, response) => {
+          clearTimeout(timer)
+          response.resume()
+          ok(response.statusCode || 0)
+        })
+        socket.once('open', () => {
+          clearTimeout(timer)
+          socket.close()
+          reject(new Error('Ordinary local upgrade unexpectedly accepted'))
+        })
+        socket.once('error', () => {
+          clearTimeout(timer)
+          reject(new Error('Upgrade probe failed before rejection status'))
+        })
+      })
     try {
       const fixture = context.pages()[0]
       await fixture.goto(fixtureServer.url)
@@ -182,6 +205,39 @@ it.runIf(process.env.PLAYWRITER_TAILCAT_TESTS === '1')(
         )
         expect(command.stdout).toContain('DERP fixture')
         expect(controller.extensionId).toMatch(/^remote:/)
+        expect(new Set([19987, controller.relayPort, controller.adapterPort, fixtureServer.port]).size).toBe(4)
+        expect(await deniedUpgrade('ws://127.0.0.1:19987/extension')).toBe(403)
+        expect(await deniedUpgrade(controller.host.replace('http:', 'ws:') + '/extension')).toBe(403)
+        const registrations = (await (await fetch(controller.host + '/extensions/status')).json()) as {
+          extensions: Array<{ extensionId: string; stableKey: string }>
+        }
+        expect(registrations.extensions.map((entry) => entry.stableKey)).toEqual([controller.extensionId])
+        expect(registrations.extensions.every((entry) => entry.extensionId.startsWith('remote_'))).toBe(true)
+        const localStatus = (await (await fetch(controller.host + '/extension/status')).json()) as {
+          connected: boolean
+        }
+        expect(localStatus.connected).toBe(false)
+        let nativeSockets: unknown[] = []
+        if (process.platform === 'win32') {
+          if (!Number.isSafeInteger(controller.nativePid) || controller.nativePid <= 0)
+            throw new Error('Invalid native process identity')
+          const observed = await promisify(execFile)(
+            'powershell.exe',
+            [
+              '-NoProfile',
+              '-Command',
+              `Get-NetTCPConnection -OwningProcess ${controller.nativePid} -State Established -ErrorAction SilentlyContinue | Select-Object RemoteAddress,RemotePort | ConvertTo-Json -Compress`,
+            ],
+            { windowsHide: true, timeout: 10_000 },
+          )
+          const sockets = JSON.parse(observed.stdout)
+          nativeSockets = Array.isArray(sockets) ? sockets : [sockets]
+          expect(
+            nativeSockets.some(
+              (socket: any) => socket.RemotePort === 443 && !['127.0.0.1', '::1'].includes(socket.RemoteAddress),
+            ),
+          ).toBe(true)
+        }
         const execute = (code: string) =>
           promisify(execFile)(
             process.execPath,
@@ -247,8 +303,18 @@ it.runIf(process.env.PLAYWRITER_TAILCAT_TESTS === '1')(
         const trace = () =>
           control.evaluate(() => chrome.runtime.sendMessage({ action: 'tailcatTest', command: 'trace' }))
         await expect.poll(async () => (await trace()).some((event: any) => event.stage === 'derp-open')).toBe(true)
-        await control.evaluate(() => chrome.runtime.sendMessage({ action: 'tailcatTest', command: 'cut', cut: true }))
-        await expect.poll(async () => (await trace()).some((event: any) => event.stage === 'derp-close')).toBe(true)
+        const cut = await control.evaluate(() =>
+          chrome.runtime.sendMessage({ action: 'tailcatTest', command: 'cut', cut: true }),
+        )
+        expect(cut.trackedIds.length).toBeGreaterThan(0)
+        await expect
+          .poll(async () => {
+            const events = await trace()
+            return cut.trackedIds.every((id: number) =>
+              events.some((event: any) => event.stage === 'derp-close' && event.socketId === id),
+            )
+          })
+          .toBe(true)
         await expect
           .poll(async () => (await trace()).some((event: any) => event.stage === 'derp-denied'), { timeout: 15_000 })
           .toBe(true)
@@ -302,12 +368,54 @@ it.runIf(process.env.PLAYWRITER_TAILCAT_TESTS === '1')(
         } finally {
           await recovered.close()
         }
+        const browserTrace = await trace()
+        const correlated = controller.trace.filter(
+          (frame) =>
+            frame.direction === 'write' &&
+            frame.id !== undefined &&
+            browserTrace.some(
+              (event: any) =>
+                event.stage === 'browser-frame' &&
+                event.direction === 'read' &&
+                event.id === frame.id &&
+                event.bytes === frame.bytes,
+            ),
+        )
+        expect(correlated.length).toBeGreaterThan(0)
+        await mkdir(join(root, 'tmp/evidence'), { recursive: true })
+        await writeFile(
+          join(root, 'tmp/evidence/edge-acceptance.json'),
+          JSON.stringify(
+            {
+              at: new Date().toISOString(),
+              sourceCommit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+              browser: context.browser()!.version(),
+              extensionVersion: JSON.parse(await readFile(join(root, 'extension/dist-tailcat/manifest.json'), 'utf8'))
+                .version,
+              endpoints: { B: 19987, R: controller.relayPort, A: controller.adapterPort, F: fixtureServer.port },
+              connection: controller.connectionId,
+              session: controller.sessionId,
+              extensionId: controller.extensionId,
+              processIds: { native: controller.nativePid, relay: controller.relayPid, adapter: controller.adapterPid },
+              nativeSockets,
+              ordinaryUpgradeProbes: 'B=403,R=403',
+              allEstablishedSocketsClosed: cut.trackedIds,
+              correlatedCommandFrames: correlated.length,
+              controllerTrace: controller.trace,
+              browserTrace,
+              requests: fixtureServer.requests,
+              result: 'passed',
+            },
+            null,
+            2,
+          ) + '\n',
+        )
       } finally {
         await controller.close()
       }
       await control.getByRole('button', { name: 'Stop sharing', exact: true }).click()
       // Count rejected local attempts, never successful bootstrap.
-      expect(upgrades).toBeGreaterThanOrEqual(0)
+      expect(upgrades).toBeGreaterThan(0)
     } finally {
       native?.kill()
       await context.close()

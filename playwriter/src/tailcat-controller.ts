@@ -158,8 +158,9 @@ export async function connectTailcat(options: {
         )
       }
     },
-    // The pinned CLI exposes establishment through its first output bytes; the
-    // independent 60 s startup timer bounds silent Ping/Dial before that point.
+    // The pinned CLI has no stream-established notification. This bounds only a
+    // non-silent preface; the silent-stream 10 s gate remains failed until the
+    // owner decision in docs/public-derp-preface-blocker.md is resolved.
     handshakeStartsOnRead: true,
     write: (bytes) =>
       new Promise((ok, reject) => {

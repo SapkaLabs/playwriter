@@ -47,6 +47,8 @@ function metadata(json: string, bytes: number, direction: 'read' | 'write'): Fra
     id: message.id,
     method: message.method,
     cdpMethod:
+      typeof message.params?.method === 'string' &&
+      message.params.method.length <= 128 &&
       /^(Target|Page|Runtime|DOM|Network|Input|Browser|Emulation|Storage|CSS|Debugger|Log|Accessibility)\.[A-Za-z]+$/.test(
         message.params?.method,
       )
@@ -74,23 +76,88 @@ const METHODS = new Set([
 
 function validate(json: string): void {
   const message = JSON.parse(json)
-  if (!message || typeof message !== 'object' || Array.isArray(message)) throw new Error('Invalid extension record')
-  if (typeof message.method === 'string' && message.method.length > 0) {
+  const object = (value: unknown) => Boolean(value && typeof value === 'object' && !Array.isArray(value))
+  const strings = (value: Record<string, unknown>, keys: string[]) => {
+    if (keys.some((key) => value[key] !== undefined && typeof value[key] !== 'string'))
+      throw new Error('Invalid extension string field')
+  }
+  if (!object(message)) throw new Error('Invalid extension record')
+  if (message.method !== undefined) {
     if (!METHODS.has(message.method)) throw new Error('Unsupported extension method')
-    if (message.id !== undefined && !Number.isSafeInteger(message.id)) throw new Error('Invalid extension request id')
-    if (
-      message.params !== undefined &&
-      (!message.params || typeof message.params !== 'object' || Array.isArray(message.params))
-    ) {
+    const notification = ['forwardCDPEvent', 'hello', 'ready', 'ping', 'pong', 'log', 'setRecorderState'].includes(
+      message.method,
+    )
+    if (notification ? message.id !== undefined : !Number.isSafeInteger(message.id))
+      throw new Error('Invalid extension request id')
+    if (message.params !== undefined && !object(message.params)) {
       throw new Error('Invalid extension parameters')
     }
-    if (message.method === 'forwardCDPCommand' && typeof message.params?.method !== 'string')
-      throw new Error('Invalid CDP command')
-    if (message.method === 'forwardCDPEvent' && typeof message.params?.method !== 'string')
-      throw new Error('Invalid CDP event')
+    const params = message.params
+    const required = (...keys: string[]) => {
+      if (!object(params) || keys.some((key) => params[key] === undefined))
+        throw new Error('Missing extension parameters')
+    }
+    switch (message.method) {
+      case 'forwardCDPCommand':
+      case 'forwardCDPEvent':
+        required('method')
+        strings(params, ['method', 'sessionId', 'source', 'tabGroup', 'tabGroupKey', 'tabGroupColor', 'ownerKey'])
+        if (
+          !/^[A-Za-z][A-Za-z0-9]*\.[A-Za-z][A-Za-z0-9]*$/.test(params.method) ||
+          (params.params !== undefined && !object(params.params))
+        )
+          throw new Error('Invalid CDP envelope')
+        break
+      case 'hello':
+        required()
+        strings(params, ['browser', 'email', 'id', 'installId', 'version'])
+        if (params.remote !== undefined && typeof params.remote !== 'boolean')
+          throw new Error('Invalid hello remote field')
+        if (
+          params.capabilities !== undefined &&
+          (!Array.isArray(params.capabilities) ||
+            params.capabilities.some((value: unknown) => typeof value !== 'string'))
+        )
+          throw new Error('Invalid hello capabilities')
+        break
+      case 'log':
+        required('level', 'args')
+        if (
+          !['log', 'debug', 'info', 'warn', 'error'].includes(params.level) ||
+          !Array.isArray(params.args) ||
+          params.args.some((value: unknown) => typeof value !== 'string')
+        )
+          throw new Error('Invalid extension log')
+        break
+      case 'setRecorderState':
+        required('recording')
+        if (typeof params.recording !== 'boolean') throw new Error('Invalid recorder state')
+        break
+      case 'updateTabGroup':
+        required('from', 'to')
+        strings(params, ['from', 'to', 'key', 'color'])
+        break
+      case 'closeTabsForKey':
+        required('key')
+        strings(params, ['key'])
+        break
+      case 'createInitialTab':
+        if (params) strings(params, ['tabGroup', 'tabGroupKey', 'tabGroupColor'])
+        break
+      case 'ghost-browser':
+        required('namespace', 'method', 'args')
+        if (
+          !['ghostPublicAPI', 'ghostProxies', 'projects'].includes(params.namespace) ||
+          typeof params.method !== 'string' ||
+          !Array.isArray(params.args)
+        )
+          throw new Error('Invalid browser command')
+        break
+    }
     return
   }
-  if (!Number.isSafeInteger(message.id) || (!('result' in message) && typeof message.error !== 'string')) {
+  // Void extension responses legitimately contain only their request id.
+  if (!Number.isSafeInteger(message.id) || (message.error !== undefined && typeof message.error !== 'string')) {
     throw new Error('Invalid extension response')
   }
 }

@@ -18,6 +18,8 @@ let listener: { close(): void } | null = null
 let generation = 0
 const reply = (id: number, result: unknown) => self.postMessage({ id, result })
 const sockets = new Set<WebSocket>()
+const socketIds = new WeakMap<WebSocket, number>()
+let socketSequence = 0
 let cut = false
 if (import.meta.env.TESTING) {
   const NativeWebSocket = globalThis.WebSocket
@@ -31,14 +33,16 @@ if (import.meta.env.TESTING) {
       }
       super(url, protocols)
       if (!isDERP) return
+      const socketId = ++socketSequence
+      socketIds.set(this, socketId)
       sockets.add(this)
-      self.postMessage({ trace: { stage: 'derp-construct', endpoint: endpoint.origin, at: Date.now() } })
+      self.postMessage({ trace: { stage: 'derp-construct', socketId, endpoint: endpoint.origin, at: Date.now() } })
       this.addEventListener('open', () =>
-        self.postMessage({ trace: { stage: 'derp-open', endpoint: endpoint.origin, at: Date.now() } }),
+        self.postMessage({ trace: { stage: 'derp-open', socketId, endpoint: endpoint.origin, at: Date.now() } }),
       )
       this.addEventListener('close', () => {
         sockets.delete(this)
-        self.postMessage({ trace: { stage: 'derp-close', endpoint: endpoint.origin, at: Date.now() } })
+        self.postMessage({ trace: { stage: 'derp-close', socketId, endpoint: endpoint.origin, at: Date.now() } })
       })
     }
   }
@@ -94,8 +98,9 @@ self.onmessage = async ({ data }) => {
       reply(id, null)
     } else if (import.meta.env.TESTING && action === 'testCut') {
       cut = Boolean(data.cut)
+      const trackedIds = Array.from(sockets, (socket) => socketIds.get(socket))
       if (cut) for (const socket of sockets) socket.close(4000, 'test data cut')
-      reply(id, { tracked: sockets.size, cut })
+      reply(id, { tracked: sockets.size, trackedIds, cut })
     } else if (import.meta.env.TESTING && action === 'testDispose') {
       const old = connection
       connection = null

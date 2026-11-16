@@ -83,6 +83,42 @@ Recorded before writing tests; the owner preapproved all six:
   ten-minute idle/memory measurements, final bundle acceptance and
   final re-review. No issue is ready to close.
 
+### Further validation and review fixes
+
+- PASS: actual background worker, extension and browser restart each revokes
+  the old descriptor before/after a released fresh positive control (three
+  cases, 188.72 s total).
+- PASS: ten-minute idle with the sharing page closed, then a fresh CLI read
+  (619.51 s test). Edge 157.0.4341.46, Windows 11 Pro 10.0.26300, Node 24.12.0.
+  Cold share/connect 4.81 s; warm connect 3.51 s; cold/warm title reads 2.44/2.54 s;
+  post-idle read 1.60 s. Browser private memory: 303.91 MiB before sharing,
+  394.75 MiB after ten minutes (+90.84 MiB). Native+relay private memory at ten
+  minutes: 215.12 MiB; adapter RSS: 111.27 MiB. These are whole-process samples,
+  not queue sizes. The idle run used checkpoint runtime `3641b25` / extension
+  0.0.177 and must be repeated for final delivery. Its initial reopened-control
+  text was sampled before refresh; CLI success and the enabled Stop action,
+  rather than that transient text, establish the post-idle behavior.
+- PASS: relocatable checkpoint developer ZIP `3641b25`, 14,381 file hashes,
+  CLI/native help outside the checkout. Spec re-review then found the standalone
+  extension notice omission; 0.0.178 fixes that, so new final hashes are required.
+- Re-review: no new hard Standards breach. Spec found schema, private logging
+  and standalone notices gaps in addition to the known deadline. Affected red/
+  green evidence and resolutions are in [the report](public-derp-reviews.md).
+- Native UI retry: state capture worked, but activation and input returned
+  `GetCursorPos failed: Access is denied. (0x80070005)` after recovery. Asked the
+  owner to make the interactive desktop available. No native UI action passed.
+- Pending: exact native deadline decision, native UI matrix, final artifact
+  revalidation and required regression success. All implementation issues remain
+  open; the built-in goal remains active.
+- PASS on the 0.0.178 candidate: complete operations/route gate (75.38 s),
+  displayed 195,682-byte viewport screenshot, B/R upgrade probes both 403, R
+  inventory contains only the remote identity, four distinct B/R/A/F ports,
+  native-process TCP/443 observations and 42 correlated controller/browser command
+  frames. Worker socket 1 closed during the cut; all replacements were denied;
+  restored-route socket 2 opened only after failed-generation disposal. Detailed
+  sanitized metadata is saved in `tmp/evidence/edge-acceptance.json`. Repeat after
+  the remaining dependency decision changes the final runtime.
+
 Never record descriptors, PSKs, private-key JSON, capability URLs or browser
 payloads in this file or exported diagnostics. Record pass/fail/unrun separately
 from source observations. Keep each issue open until its acceptance is proven.

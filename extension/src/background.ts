@@ -325,6 +325,18 @@ type RemoteTunnelRuntime = {
   status: string
 }
 let remoteTunnel: RemoteTunnelRuntime | null = null
+let tailcatLogScopes = 0
+
+// Keep inherited diagnostics from serializing browser data during a public
+// share, including commands that finish after Stop has cleared remoteTunnel.
+async function withoutTailcatLogs<T>(operation: () => Promise<T>): Promise<T> {
+  tailcatLogScopes++
+  try {
+    return await operation()
+  } finally {
+    tailcatLogScopes--
+  }
+}
 let tailcatFailure: string | null = null
 
 /**
@@ -758,26 +770,27 @@ function sendLog(level: string, args: any[]) {
   })
 }
 
+function emitLog(level: 'log' | 'debug' | 'info' | 'warn' | 'error', args: any[]): void {
+  if (remoteTunnel?.tailcat || tailcatLogScopes) return
+  console[level](...args)
+  sendLog(level, args)
+}
+
 export const logger = {
   log: (...args: any[]) => {
-    console.log(...args)
-    sendLog('log', args)
+    emitLog('log', args)
   },
   debug: (...args: any[]) => {
-    console.debug(...args)
-    sendLog('debug', args)
+    emitLog('debug', args)
   },
   info: (...args: any[]) => {
-    console.info(...args)
-    sendLog('info', args)
+    emitLog('info', args)
   },
   warn: (...args: any[]) => {
-    console.warn(...args)
-    sendLog('warn', args)
+    emitLog('warn', args)
   },
   error: (...args: any[]) => {
-    console.error(...args)
-    sendLog('error', args)
+    emitLog('error', args)
   },
 }
 
@@ -946,7 +959,7 @@ async function dispatchRelayMessage(message: any, sink: RelayMessageSink): Promi
     const tabIds = [...store.getState().tabs].filter(([, info]) => info.groupKey === key).map(([tabId]) => tabId)
     // One call per tab: chrome.tabs.remove([...]) stops at the first id that fails, e.g. a tab
     // the user closed meanwhile, and would leave the remaining tabs open.
-    void Promise.allSettled(tabIds.map((tabId) => chrome.tabs.remove(tabId))).then((results) => {
+    return Promise.allSettled(tabIds.map((tabId) => chrome.tabs.remove(tabId))).then((results) => {
       const errors = results
         .flatMap((r) => (r.status === 'rejected' ? [String(r.reason?.message ?? r.reason)] : []))
         .filter((error) => !error.startsWith('No tab with id'))
@@ -957,7 +970,6 @@ async function dispatchRelayMessage(message: any, sink: RelayMessageSink): Promi
       const closedTabs = results.filter((r) => r.status === 'fulfilled').length
       sink.send({ id: message.id, result: { success: true, closedTabs } satisfies CloseTabsForKeyResult })
     })
-    return
   }
 
   // Update a session's tab group (rename and/or recolor): rewrite the stored
@@ -1082,6 +1094,7 @@ async function dispatchRelayMessage(message: any, sink: RelayMessageSink): Promi
       .catch((e) => {
         logger.debug('updateTabGroup queue error:', e)
       })
+    if (sink.remoteRuntime?.tailcat) await tabGroupQueue
     return
   }
 
@@ -2589,11 +2602,13 @@ async function startRemoteControl(
           } catch {
             return
           }
-          return dispatchRelayMessage(parsed, {
-            send: conn.send,
-            remoteRuntime: runtime,
-            isCurrent: () => active && remoteTunnel === runtime,
-          }).catch(() => virtualConn.close())
+          const dispatch = () =>
+            dispatchRelayMessage(parsed, {
+              send: conn.send,
+              remoteRuntime: runtime,
+              isCurrent: () => active && remoteTunnel === runtime,
+            }).catch(() => virtualConn.close())
+          return runtime.tailcat ? withoutTailcatLogs(dispatch) : dispatch()
         },
         onClose: () => {
           active = false
@@ -4060,7 +4075,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ error: 'Sharing is already active or no tab is selected' })
         return false
       }
-      void startRemoteControl(message.tabId, { tailcat: true }).then(
+      void withoutTailcatLogs(() => startRemoteControl(message.tabId, { tailcat: true })).then(
         () => sendResponse({}),
         () => sendResponse({ error: 'Start failed; sharing stopped' }),
       )

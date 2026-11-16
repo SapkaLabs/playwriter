@@ -32,7 +32,10 @@ export default defineConfig({
     viteStaticCopy({
       targets: [
         ...(tailcatAssets
-          ? [{ src: normalizePath(resolve(tailcatAssets, '{main.wasm,wasm_exec.js}')), dest: 'tailcat' }]
+          ? [
+              { src: normalizePath(resolve(tailcatAssets, '{main.wasm,wasm_exec.js}')), dest: 'tailcat' },
+              { src: normalizePath(resolve(tailcatAssets, 'notices')), dest: 'tailcat' },
+            ]
           : []),
         {
           src: normalizePath(resolve(__dirname, 'icons/*')),

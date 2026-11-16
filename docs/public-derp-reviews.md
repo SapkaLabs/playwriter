@@ -55,5 +55,46 @@ The dedicated Edge test failed with `Truncated protocol stream` (13.26 s).
 Startup now checks its generation before attaching and stale cleanup preserves
 tabs owned by the current share. The same test passes (6.99 s).
 
-Final review must include all changes after `6738af1`, using the same fixed
-baseline, after the remaining material findings and acceptance rows are resolved.
+## Independent recheck through `3641b25`
+
+The same fixed baseline was used with two fresh independent review agents.
+Uncommitted restart/performance helper tests were included. Both reviews were
+read-only; neither agent ran browser tests.
+
+### Standards
+
+No new hard documented-standard breach found. Prior Copy behavior, portability,
+manifest/tag/changeset bookkeeping and optional relay defaults are resolved in
+source. Repeated transport selection remains one judgment call, proportionate
+to this two-transport PoC. Native UI confirmation is still required.
+
+Standards recheck: zero hard findings, one judgment call; repeated transport
+selection is the only remaining maintainability concern.
+
+### Spec
+
+Four P2 findings:
+
+1. Schema rejection accepted a command without an ID and numeric hello fields.
+   Added typed envelope checks for supported messages, preserving valid void
+   responses. New malformed-envelope tests first failed in 11 cases; all 24
+   framing tests passed in both ingress and egress directions; a further bounded
+   diagnostic-name check brings the suite to 25 passing cases.
+2. Inherited extension diagnostics could log remote navigation URLs/parameters.
+   Real Edge marker-URL test failed before the fix and passed afterward (9.76 s).
+   Public shares suppress these diagnostics, with scoped suppression retained
+   until pending dispatch/startup work completes after Stop. Queued group/tab
+   operations stay inside their dispatch lifetime.
+3. The standalone unpacked extension lacked dependency notices; only the
+   controller had them. Bundle verification reproduced the missing Tailcat
+   license. The Vite copy now includes the notice directory; an actual standalone
+   build contains Tailcat and Go licenses. Final bundle verification is pending.
+4. Exact native preface deadline remains failed. This still needs the pending
+   owner decision; no timeout was waived.
+
+The reviewer confirmed prior revocation, shared-budget and terminal-failure
+fixes, and found no material scope creep. Native UI, final artifact-bound
+validation, performance evidence and regression success remain obligations.
+
+Spec recheck: four P2 findings; three have source fixes and affected checks,
+and the stream-establishment deadline remains unresolved.

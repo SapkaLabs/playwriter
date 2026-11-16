@@ -27,20 +27,74 @@ export async function setupTailcatTest() {
     sentinel.once('error', fail)
     sentinel.listen(19987, '127.0.0.1', ok)
   })
-  const context = await chromium.launchPersistentContext(profile, {
-    ...(process.env.EDGE_PATH ? { executablePath: process.env.EDGE_PATH } : { channel: 'msedge' }),
-    headless: false,
-    ignoreDefaultArgs: ['--disable-extensions'],
-    args: [
-      `--disable-extensions-except=${join(root, 'extension/dist-tailcat')}`,
-      `--load-extension=${join(root, 'extension/dist-tailcat')}`,
-      '--no-first-run',
-      '--no-default-browser-check',
-    ],
-  })
+  const launch = () =>
+    chromium.launchPersistentContext(profile, {
+      ...(process.env.EDGE_PATH ? { executablePath: process.env.EDGE_PATH } : { channel: 'msedge' }),
+      headless: false,
+      ignoreDefaultArgs: ['--disable-extensions'],
+      args: [
+        `--disable-extensions-except=${join(root, 'extension/dist-tailcat')}`,
+        `--load-extension=${join(root, 'extension/dist-tailcat')}`,
+        '--no-first-run',
+        '--no-default-browser-check',
+      ],
+    })
+  let context = await launch()
   await context.pages()[0].goto(fixture.url)
-  const control = await context.newPage()
-  await control.goto('chrome-extension://pebbngnfojnignonigcnkdilknapkgid/src/tailcat-share.html')
+  let control = await context.newPage()
+  const controlURL = 'chrome-extension://pebbngnfojnignonigcnkdilknapkgid/src/tailcat-share.html'
+  await control.goto(controlURL)
+  const openControl = async () => {
+    control = await context.newPage()
+    await control.goto(controlURL)
+  }
+  const restart = async (mode: 'browser' | 'extension' | 'background') => {
+    if (mode === 'browser') {
+      await context.close()
+      context = await launch()
+      await context.pages()[0].goto(fixture.url)
+    } else if (mode === 'extension') {
+      const worker = context
+        .serviceWorkers()
+        .find((worker) => worker.url().startsWith('chrome-extension://pebbngnfojnignonigcnkdilknapkgid/'))
+      if (!worker) throw new Error('Extension service worker unavailable')
+      const closed = new Promise<void>((ok) => worker.once('close', () => ok()))
+      await worker.evaluate(() => chrome.runtime.reload()).catch(() => {})
+      await Promise.race([
+        closed,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Extension did not reload')), 10_000)),
+      ])
+      await control.close().catch(() => {})
+    } else {
+      const cdp = await context.newCDPSession(control)
+      const versions = new Map<string, { versionId: string; scriptURL: string; runningStatus: string }>()
+      cdp.on('ServiceWorker.workerVersionUpdated', ({ versions: updated }) => {
+        for (const version of updated) versions.set(version.versionId, version)
+      })
+      await cdp.send('ServiceWorker.enable')
+      await expect
+        .poll(
+          () =>
+            Array.from(versions.values()).find(
+              (version) =>
+                version.scriptURL.startsWith('chrome-extension://pebbngnfojnignonigcnkdilknapkgid/') &&
+                version.runningStatus === 'running',
+            ),
+          { timeout: 10_000 },
+        )
+        .toBeTruthy()
+      const version = Array.from(versions.values()).find(
+        (version) =>
+          version.scriptURL.startsWith('chrome-extension://pebbngnfojnignonigcnkdilknapkgid/') &&
+          version.runningStatus === 'running',
+      )!
+      await cdp.send('ServiceWorker.stopWorker', { versionId: version.versionId })
+      await cdp.detach()
+      await control.close()
+    }
+    control = await context.newPage()
+    await control.goto(controlURL)
+  }
   let sequence = 0
   const connections: Array<Awaited<ReturnType<typeof connectTailcat>>> = []
   const testControl = (command: string, data: Record<string, unknown> = {}) =>
@@ -87,8 +141,14 @@ export async function setupTailcatTest() {
     )
   return {
     fixture,
-    context,
-    control,
+    get context() {
+      return context
+    },
+    get control() {
+      return control
+    },
+    restart,
+    openControl,
     nativePath,
     profile,
     connect,

@@ -2,6 +2,85 @@ import { describe, expect, it } from 'vitest'
 import { FramedStream, PendingDataBudget } from './tailcat-protocol.js'
 
 describe('public Tailcat framed byte stream', () => {
+  it('keeps diagnostic command names bounded independently of the record size', async () => {
+    let diagnostic: unknown
+    const stream = new FramedStream({
+      write: async () => {},
+      onMessage: async () => {},
+      onError: () => {},
+      onFrame: (frame) => {
+        diagnostic = frame.cdpMethod
+      },
+    })
+    await stream.start()
+    await stream.receive(new Uint8Array([80, 87, 84, 67, 49, 10]))
+    await stream.send(
+      JSON.stringify({ id: 1, method: 'forwardCDPCommand', params: { method: 'Runtime.' + 'A'.repeat(200) } }),
+    )
+    expect(diagnostic).toBeUndefined()
+    stream.close()
+  })
+  it('preserves a valid void response with only its request id', async () => {
+    const sent: number[][] = []
+    const stream = new FramedStream({
+      write: async (bytes) => {
+        sent.push([...bytes])
+      },
+      onMessage: async () => {},
+      onError: () => {},
+    })
+    await stream.start()
+    await stream.receive(new Uint8Array([80, 87, 84, 67, 49, 10]))
+    await expect(stream.send('{"id":1}')).resolves.toBeUndefined()
+    expect(sent.slice(1).flat()).toEqual([0, 0, 0, 8, 123, 34, 105, 100, 34, 58, 49, 125])
+    stream.close()
+  })
+  it.each([
+    { method: 'forwardCDPCommand', params: { method: 'Page.enable' } },
+    { method: 'hello', params: { browser: 123 } },
+    { method: 'hello', params: { remote: 'yes' } },
+    { method: 'forwardCDPEvent', params: { method: 'Page.loadEventFired', sessionId: 123 } },
+    { id: 1, method: 'forwardCDPCommand', params: { method: 'Page.enable', params: [] } },
+    { id: 1, method: 'updateTabGroup', params: { from: 'a' } },
+    { id: 1, method: 'closeTabsForKey', params: { key: 123 } },
+    { method: 'setRecorderState', params: { recording: 'yes' } },
+    { method: 'log', params: { level: 'debug', args: [123] } },
+    { id: 1, method: 'ping' },
+    { id: 1, method: 123, result: {} },
+    { id: 1, error: { message: 'bad' } },
+  ])('rejects a malformed protocol envelope %# in both directions', async (record) => {
+    const errors: string[] = []
+    let dispatched = false
+    const json = JSON.stringify(record),
+      bytes = new TextEncoder().encode(json)
+    const stream = new FramedStream({
+      write: async () => {},
+      onMessage: async () => {
+        dispatched = true
+      },
+      onError: (error) => errors.push(error.message),
+    })
+    await stream.start()
+    await stream.receive(new Uint8Array([80, 87, 84, 67, 49, 10]))
+    await expect(stream.send(json)).rejects.toThrow()
+    stream.close()
+    const incoming = new FramedStream({
+      write: async () => {},
+      onMessage: async () => {
+        dispatched = true
+      },
+      onError: (error) => errors.push(error.message),
+    })
+    await incoming.start()
+    const wire = new Uint8Array(10 + bytes.length)
+    wire.set([80, 87, 84, 67, 49, 10])
+    new DataView(wire.buffer).setUint32(6, bytes.length)
+    wire.set(bytes, 10)
+    await incoming.receive(wire)
+    expect(errors.length).toBeGreaterThan(0)
+    expect(dispatched).toBe(false)
+    incoming.close()
+  })
   it('shares one endpoint budget across framed queues and its bridge', async () => {
     const budget = new PendingDataBudget()
     const releaseBridge = budget.reserve(24 * 1024 * 1024)

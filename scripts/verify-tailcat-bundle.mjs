@@ -8,6 +8,10 @@ import { tmpdir } from 'node:os'
 const { values } = parseArgs({ options: { bundle: { type: 'string', default: 'dist/public-derp' } } })
 const bundle = resolve(values.bundle)
 const manifest = JSON.parse(await readFile(join(bundle, 'delivery.json'), 'utf8'))
+for (const name of ['tailcat-LICENSE', 'go-LICENSE']) {
+  await readFile(join(bundle, 'extension/tailcat/notices', name))
+  await readFile(join(bundle, 'controller/tailcat/notices', name))
+}
 const expected = new Set()
 for (const file of manifest.files) {
   const path = resolve(bundle, file.path)

@@ -102,3 +102,36 @@ reproduced contract defect. Automated DOM clicks are partial evidence: they do
 not replace native browser-owned UI Stop acceptance. Tests use owned temporary
 profiles and isolated state; disposable diagnostic directories are prefixed
 `playwriter-regression-` in the OS temp directory.
+
+After building the ordinary developer bundle, validate its compiled CLI from a
+relocated directory against its packaged extension:
+
+```powershell
+$env:PLAYWRITER_TAILCAT_TESTS = '1'
+$env:PLAYWRITER_TAILCAT_DELIVERY = '1'
+pnpm --filter playwriter exec vitest run src/tailcat-delivery.test.ts
+```
+
+## Transport maintenance
+
+The unchanged upstream `tailcatListen({derpMapURL,onConnection})` promise returns
+`addr`, private-key JSON and `close()`. Only `addr` crosses the Playwriter worker
+boundary. Each accepted connection exposes its logical port, pull-based
+`read(): Promise<Uint8Array|null>`, `write(bytes)`, `closeWrite()` and `close()`.
+`null` is EOF; reads share an upstream 64 KiB buffer and must be serialized.
+The worker serializes writes and rejects other ports or a second controller.
+Native pipe writes honor drain callbacks. Framing closes the whole connection;
+it does not use upstream's optional half-close, which rejects if unsupported.
+
+Upstream startup promises offer no cancellation signal. Revocation terminates
+the dedicated worker, including a pending listener startup and its key material.
+The offscreen document itself also serves clipboard/audio functions and stays
+separate from that worker's lifetime. Runtime/port loss requires a fresh Start.
+
+Native map cache and keys use separate upstream namespaces. The controller sets
+Windows `LOCALAPPDATA=<run>/cache` and `APPDATA=<run>/config` (and corresponding
+XDG variables). Observed upstream map paths are
+`<UserCacheDir>/tailcat/derpmap-<URL-query-escaped>.json` plus `.etag`; named keys
+would use `<UserConfigDir>/tailcat/keys/<name>.private.json`. The `--key=new`
+client path generates a fresh key without loading a named key. Test cleanup
+removes only the owned run; personal Tailcat caches/configuration are untouched.

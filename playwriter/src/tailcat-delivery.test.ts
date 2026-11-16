@@ -1,7 +1,7 @@
 import { it, expect } from 'vitest'
 import { spawn, execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdtemp, rm, writeFile, mkdir, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { setupTailcatTest, tailcatTestsEnabled } from './tailcat-test-utils.js'
@@ -63,23 +63,63 @@ it.runIf(tailcatTestsEnabled && process.env.PLAYWRITER_TAILCAT_DELIVERY === '1')
       )
       expect(ready.command).toContain('--timeout 30000')
       const run = promisify(execFile)
-      const result = await run(
-        process.execPath,
-        [
-          join(relocated, 'bin.js'),
-          '--host',
-          ready.host,
-          '-s',
-          ready.session,
-          '--timeout',
-          '30000',
-          '-e',
-          `state.page=context.pages().find(p=>p.url()===${JSON.stringify(test.fixture.url)}); console.log(await state.page.title()); await state.page.getByRole('button',{name:'Click counter',exact:true}).click(); console.log(JSON.stringify(await state.page.evaluate(()=>window.fixtureHistory)))`,
-        ],
-        { cwd: relocated, env, windowsHide: true, timeout: 40_000, maxBuffer: 8192 },
+      const execute = (code: string) =>
+        run(
+          process.execPath,
+          [join(relocated, 'bin.js'), '--host', ready.host, '-s', ready.session, '--timeout', '30000', '-e', code],
+          { cwd: relocated, env, windowsHide: true, timeout: 40_000, maxBuffer: 8192 },
+        )
+      const result = await execute(
+        `state.page=context.pages().find(p=>p.url()===${JSON.stringify(test.fixture.url)}); console.log(await state.page.title()); await state.page.getByRole('button',{name:'Click counter',exact:true}).click(); await state.page.getByRole('textbox',{name:'Unicode text'}).fill('Привіт 👋 漢字'); console.log(JSON.stringify(await state.page.evaluate(()=>window.fixtureHistory)))`,
       )
       expect(result.stdout).toContain('DERP fixture')
       expect(result.stdout.match(/"type":"click"/g)).toHaveLength(1)
+      expect(result.stdout).toContain('Привіт 👋 漢字')
+      const snapshot = await execute(
+        'console.log((await snapshot({page:state.page,showDiffSinceLastCall:false})).slice(0,8192))',
+      )
+      expect(snapshot.stdout).toContain('Unicode text')
+      expect(Buffer.byteLength(snapshot.stdout)).toBeLessThanOrEqual(8192)
+      await mkdir(join(root, 'tmp/evidence'), { recursive: true })
+      const screenshot = join(root, 'tmp/evidence/delivery-viewport.png')
+      await execute(
+        `state.imageBytes=(await state.page.screenshot({path:${JSON.stringify(screenshot)},scale:'css'})).length; if(state.imageBytes>4194304) throw Error('Viewport exceeds 4 MiB'); console.log('viewport captured')`,
+      )
+      const image = await readFile(screenshot)
+      expect(image.length).toBeLessThanOrEqual(4 * 1024 * 1024)
+      expect(image.subarray(0, 4)).toEqual(Buffer.from([137, 80, 78, 71]))
+      expect(
+        (
+          await execute(
+            'await state.page.getByText("Scroll marker",{exact:true}).scrollIntoViewIfNeeded(); console.log(await state.page.evaluate(()=>window.scrollY>0))',
+          )
+        ).stdout,
+      ).toContain('true')
+      const logs = await execute(
+        'console.log(JSON.stringify(await getLatestLogs({page:state.page,count:20})).slice(0,4096))',
+      )
+      expect(Buffer.byteLength(logs.stdout)).toBeLessThanOrEqual(4096)
+      const selected = await execute(
+        'state.response=state.page.waitForResponse(r=>new URL(r.url()).pathname==="/json"); await state.page.getByRole("button",{name:"Load JSON",exact:true}).click(); const body=await (await state.response).body(); if(body.length>65536) throw Error("Selected body exceeds 64 KiB"); console.log(body.toString().slice(0,8192))',
+      )
+      expect(selected.stdout).toContain(test.fixture.nonce)
+      expect(Buffer.byteLength(selected.stdout)).toBeLessThanOrEqual(8192)
+      const oversized = await execute(
+        'state.response=state.page.waitForResponse(r=>new URL(r.url()).pathname==="/oversized"); await state.page.getByRole("button",{name:"Load oversized JSON",exact:true}).click(); const body=await (await state.response).body(); console.log(body.length>65536?"Selected body exceeds 64 KiB":"unexpected small body")',
+      )
+      expect(oversized.stdout).toContain('exceeds 64 KiB')
+      const unavailable = await execute(
+        'state.cdp=await getCDPSession({page:state.page}); await state.cdp.send("Network.enable",{maxTotalBufferSize:64,maxResourceBufferSize:32}); state.evictedId=null; state.cdp.on("Network.responseReceived",e=>{if(new URL(e.response.url).pathname==="/evicted")state.evictedId=e.requestId}); state.evictedDone=new Promise(ok=>state.cdp.on("Network.loadingFinished",e=>{if(e.requestId===state.evictedId)ok()})); await state.page.getByRole("button",{name:"Load evicted JSON",exact:true}).click(); await state.evictedDone; try{await state.cdp.send("Network.getResponseBody",{requestId:state.evictedId}); console.log("unexpected body")}catch{console.log("Selected body unavailable") }',
+      )
+      expect(unavailable.stdout).toContain('Selected body unavailable')
+      for (const path of ['/json', '/oversized', '/evicted']) expect(test.fixture.requests[path]).toBe(1)
+      expect(
+        (
+          await execute(
+            'await state.page.getByRole("link",{name:"Navigate fixture"}).click(); console.log(state.page.url().endsWith("/next"))',
+          )
+        ).stdout,
+      ).toContain('true')
       const exited = new Promise<void>((ok) => child!.once('exit', () => ok()))
       await run(process.execPath, [join(relocated, 'tailcat-bin.js'), 'disconnect', '--connection', ready.connection], {
         cwd: relocated,

@@ -1759,7 +1759,7 @@ describe('Relay Core Tests', () => {
       name: 'execute',
       arguments: {
         code: js`
-          await state.errorTestPage.click('#hidden-btn', { timeout: 100 });
+          await state.errorTestPage.click('#hidden-btn', { timeout: 1000 });
         `,
       },
     })
@@ -1768,7 +1768,7 @@ describe('Relay Core Tests', () => {
     const text = (result.content as any)[0].text as string
     expect(text.slice(0, text.indexOf('Call log:'))).toMatchInlineSnapshot(`
       "
-      Error executing code: page.click: Timeout 100ms exceeded. Element is not visible — it may be hidden by CSS, inside a collapsed <details>, inactive tab, or closed accordion. Try: interact with the page to reveal it first, or use { force: true } to skip visibility checks
+      Error executing code: page.click: Timeout 1000ms exceeded. Element is not visible — it may be hidden by CSS, inside a collapsed <details>, inactive tab, or closed accordion. Try: interact with the page to reveal it first, or use { force: true } to skip visibility checks
       "
     `)
     expect(text).toContain('element is not visible')
@@ -1838,7 +1838,7 @@ describe('Relay Core Tests', () => {
       name: 'execute',
       arguments: {
         code: js`
-          await state.errorTestPage.click('#covered-btn', { timeout: 100 });
+          await state.errorTestPage.click('#covered-btn', { timeout: 1000 });
         `,
       },
     })
@@ -1847,7 +1847,7 @@ describe('Relay Core Tests', () => {
     const text = (result.content as any)[0].text as string
     expect(text.slice(0, text.indexOf('Call log:'))).toMatchInlineSnapshot(`
       "
-      Error executing code: page.click: Timeout 100ms exceeded. <div id="overlay">Overlay</div> intercepts pointer events
+      Error executing code: page.click: Timeout 1000ms exceeded. <div id="overlay">Overlay</div> intercepts pointer events
       "
     `)
     expect(text).toContain('intercepts pointer events')
@@ -1939,7 +1939,7 @@ describe('Relay Core Tests', () => {
           code: js`
             state.clockA = await context.newPage()
             await state.clockA.goto('${server.baseUrl}/a')
-            state.video = await recording.start({ page: state.clockA, outputPath: '${outputPath}', clock: 'manual', frameRate: 30 })
+            state.video = await recording.start({ page: state.clockA, outputPath: ${JSON.stringify(outputPath)}, clock: 'manual', frameRate: 30 })
             await state.clockA.evaluate(() => { document.getElementById('box').style.transform = 'translateX(300px)' })
             await state.video.wait(500)
           `,
@@ -2014,7 +2014,7 @@ describe('Relay Core Tests', () => {
             return {
               duplicate,
               auto: autoResult.endReason,
-              autoRelative: autoResult.path.endsWith('tmp/recording-endings/auto.webm'),
+              autoRelative: autoResult.path.split(String.fromCharCode(92)).join('/').endsWith('tmp/recording-endings/auto.webm'),
               closed: closedResult.endReason,
               noneLeft: await recording.stop().then(() => 'stopped', (error) => error.message),
             }
@@ -2022,7 +2022,11 @@ describe('Relay Core Tests', () => {
         },
       })
       expect(result.isError).toBeFalsy()
-      const text = (result.content as Array<{ text: string }>)[0].text.replaceAll(dir, '<dir>')
+      const text = (result.content as Array<{ text: string }>)[0].text
+        .replaceAll(dir.replaceAll('\\', '\\\\'), '<dir>')
+        .replaceAll(dir, '<dir>')
+        .replaceAll('\\\\', '/')
+        .replaceAll('\\', '/')
       expect(text).toMatchInlineSnapshot(`
         "[WARNING] Recording ended without stop() (max-duration). Saved <dir>/auto.webm
         [WARNING] Recording ended without stop() (page-closed). Saved <dir>/closed.mp4
@@ -2037,6 +2041,7 @@ describe('Relay Core Tests', () => {
       const { spawnSync } = await import('node:child_process')
       for (const name of ['auto.webm', 'closed.mp4']) {
         const probe = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', path.join(dir, name)])
+        expect(probe.status, probe.stderr.toString()).toBe(0)
         expect(Number(probe.stdout.toString())).toBeGreaterThan(1.5)
       }
     } finally {

@@ -23,7 +23,7 @@ await new Promise<void>((ok, fail) => {
 })
 const extension = process.env.PLAYWRITER_UI_EXTENSION || join(root, 'extension/dist-tailcat')
 const context = await chromium.launchPersistentContext(profile, {
-  executablePath: process.env.EDGE_PATH || 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
+  ...(process.env.EDGE_PATH ? { executablePath: process.env.EDGE_PATH } : { channel: 'msedge' }),
   headless: false,
   ignoreDefaultArgs: ['--disable-extensions'],
   args: [

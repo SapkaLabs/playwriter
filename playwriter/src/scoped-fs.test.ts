@@ -78,7 +78,7 @@ describe('resolveSessionCwd', () => {
 
   test('resolves POSIX absolute paths directly', () => {
     const result = resolveSessionCwd('/home/user/project')
-    expect(result.cwd).toBe('/home/user/project')
+    expect(result.cwd).toBe(path.resolve('/home/user/project'))
     expect(result.warning).toBeNull()
   })
 

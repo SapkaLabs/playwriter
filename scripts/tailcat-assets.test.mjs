@@ -2,16 +2,20 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { resolve, join } from 'node:path'
 
 // Approved seam 6: exercise the actual provisioning entry point and emitted assets.
 test('pinned dependency provisioning emits matching native, WASM and Go runtime with verifiable hashes', () => {
+  const go =
+    process.env.TAILCAT_GO || resolve('tmp/tailcat-build/go/bin', process.platform === 'win32' ? 'go.exe' : 'go')
+  const goRoot = spawnSync(go, ['env', 'GOROOT'], { encoding: 'utf8' })
+  assert.equal(goRoot.status, 0, goRoot.stderr)
   const result = spawnSync(
     process.execPath,
     [
       'scripts/build-tailcat.mjs',
       '--go',
-      resolve('tmp/tailcat-build/go/bin/go.exe'),
+      go,
       '--cache',
       resolve('tmp/tailcat-build'),
       '--out',
@@ -26,7 +30,7 @@ test('pinned dependency provisioning emits matching native, WASM and Go runtime 
   assert.deepEqual([...readFileSync('tmp/tailcat-assets/main.wasm').subarray(0, 4)], [0, 97, 115, 109])
   assert.deepEqual(
     readFileSync('tmp/tailcat-assets/wasm_exec.js'),
-    readFileSync('tmp/tailcat-build/go/lib/wasm/wasm_exec.js'),
+    readFileSync(join(goRoot.stdout.trim(), 'lib/wasm/wasm_exec.js')),
   )
   const verification = spawnSync(
     process.execPath,

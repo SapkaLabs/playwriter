@@ -4,19 +4,15 @@ import { fileURLToPath } from 'node:url'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { describe, expect, test } from 'vitest'
+import { createRequire } from 'node:module'
 
 const execFileAsync = promisify(execFile)
 const currentDir = path.dirname(fileURLToPath(import.meta.url))
 const playwriterDir = path.resolve(currentDir, '..')
-const viteNodeBinary = path.join(
-  playwriterDir,
-  'node_modules',
-  '.bin',
-  process.platform === 'win32' ? 'vite-node.cmd' : 'vite-node',
-)
+const viteNodeBinary = createRequire(import.meta.url).resolve('vite-node/cli')
 
 async function runCli(args: string[]): Promise<{ stdout: string; stderr: string }> {
-  return execFileAsync(viteNodeBinary, ['src/cli.ts', ...args], {
+  return execFileAsync(process.execPath, [viteNodeBinary, 'src/cli.ts', ...args], {
     cwd: playwriterDir,
     env: process.env,
   })
@@ -69,8 +65,8 @@ describe('playwriter cli help', () => {
     try {
       const emptyHome = path.join(playwriterDir, 'tmp', 'missing-home')
       await execFileAsync(
-        viteNodeBinary,
-        ['src/cli.ts', 'session', 'new', '--host', `http://127.0.0.1:${port}`],
+        process.execPath,
+        [viteNodeBinary, 'src/cli.ts', 'session', 'new', '--host', `http://127.0.0.1:${port}`],
         {
           cwd: playwriterDir,
           env: {

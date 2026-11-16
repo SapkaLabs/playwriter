@@ -1,5 +1,12 @@
-import { FramedStream, PUBLIC_DERP_MAP, MAX_CHUNK } from 'playwriter/src/tailcat-protocol'
+import {
+  FramedStream,
+  PendingDataBudget,
+  utf8Length,
+  PUBLIC_DERP_MAP,
+  MAX_CHUNK,
+} from 'playwriter/src/tailcat-protocol'
 import type { RemoteTunnelOptions, TunnelConnectionHandlers } from './remote-tunnel'
+import { waitTailcatBarrier } from './tailcat-test-controls'
 
 export class TailcatTunnel {
   url = ''
@@ -16,7 +23,7 @@ export class TailcatTunnel {
   test(action: string, data: Record<string, unknown> = {}): Promise<any> {
     if (!import.meta.env.TESTING) return Promise.reject(new Error('Test controls are unavailable'))
     if (action === 'dispose') this.closeGeneration(this.generation)
-    return this.request(action === 'cut' ? 'testCut' : 'testDispose', data)
+    return this.request(action === 'cut' ? 'testCut' : action === 'workerLoss' ? 'testKill' : 'testDispose', data)
   }
   private port: chrome.runtime.Port | null = null
   private closed = false
@@ -27,22 +34,26 @@ export class TailcatTunnel {
   private handlers: TunnelConnectionHandlers | null = null
   private generation = 0
 
-  constructor(private options: RemoteTunnelOptions & { ensureOffscreen(): Promise<void>; onFatal(): void }) {}
+  constructor(
+    private options: RemoteTunnelOptions & { ensureOffscreen(): Promise<void>; onFatal(reason: string): void },
+  ) {}
 
   start(): void {
     void this.open().catch(() => {
-      if (!this.closed) this.options.onFatal()
+      if (!this.closed) this.options.onFatal('Public sharing startup failed; sharing stopped')
     })
   }
 
   private async open(): Promise<void> {
-    this.startup = setTimeout(() => this.options.onFatal(), 60_000)
+    this.startup = setTimeout(() => this.options.onFatal('Public sharing startup timed out; sharing stopped'), 60_000)
+    if (import.meta.env.TESTING) await waitTailcatBarrier('startup-before-listen')
+    if (this.closed) return
     await this.options.ensureOffscreen()
     if (this.closed) return
     const port = chrome.runtime.connect({ name: 'playwriter-tailcat' })
     this.port = port
     port.onDisconnect.addListener(() => {
-      if (!this.closed) this.options.onFatal()
+      if (!this.closed) this.options.onFatal('Transport owner lost; sharing stopped')
     })
     port.onMessage.addListener((data) => {
       if (this.closed) return
@@ -51,7 +62,7 @@ export class TailcatTunnel {
         return
       }
       if (data.fatal) {
-        this.options.onFatal()
+        this.options.onFatal('Transport runtime lost; sharing stopped')
         return
       }
       if (data.connected) {
@@ -74,6 +85,8 @@ export class TailcatTunnel {
       relayMode: 'public',
       derpMapURL: PUBLIC_DERP_MAP,
     })
+    if (import.meta.env.TESTING) await waitTailcatBarrier('startup-after-descriptor')
+    if (this.closed) return
     clearTimeout(this.startup)
     this.options.onStatusChange('online')
   }
@@ -90,7 +103,9 @@ export class TailcatTunnel {
   private async accept(generation: number): Promise<void> {
     if (this.closed || this.stream) return
     this.generation = generation
+    const budget = new PendingDataBudget()
     const stream = new FramedStream({
+      budget,
       onFrame: (frame) => {
         if (import.meta.env.TESTING) this.record({ stage: 'browser-frame', generation, at: Date.now(), ...frame })
       },
@@ -101,9 +116,20 @@ export class TailcatTunnel {
           generation,
           base64: btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join('')),
         })
+        if (import.meta.env.TESTING && bytes.length === MAX_CHUNK) await waitTailcatBarrier('transfer')
       },
       onMessage: async (json) => {
-        if (!this.closed && this.stream === stream) this.handlers?.onMessage(json)
+        if (this.closed || this.stream !== stream) return
+        const release = budget.reserve(utf8Length(json))
+        try {
+          const dispatched = this.handlers?.onMessage(json)
+          void Promise.resolve(dispatched)
+            .finally(release)
+            .catch(() => this.closeGeneration(generation))
+        } catch (error) {
+          release()
+          throw error
+        }
       },
       onError: () => {
         this.closeGeneration(generation)
@@ -128,6 +154,8 @@ export class TailcatTunnel {
         this.closeGeneration(generation)
       }
     })()
+    if (import.meta.env.TESTING) await waitTailcatBarrier('preface')
+    if (this.closed || this.stream !== stream) return
     await stream.start()
     try {
       await stream.ready

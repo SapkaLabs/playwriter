@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { spawn, execFileSync } from 'node:child_process'
 import { cp, mkdir, readFile, writeFile, readdir, rm } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
@@ -34,14 +34,30 @@ await run([pnpmScript, '--filter', 'mcp-extension', 'build'], {
   PRODUCTION: '',
 })
 await mkdir(output, { recursive: true })
-await cp(join(root, 'extension/dist-derp-delivery'), join(output, 'extension'), { recursive: true })
-// deploy provisions all runtime dependencies, including both local Playwright forks.
-// Each output is unique: pnpm refuses to overwrite an existing controller folder.
+const deliveredExtension = join(output, 'extension')
+if (relative(root, deliveredExtension).replaceAll('\\', '/') !== 'dist/public-derp/extension')
+  throw new Error('Unsafe delivered extension output')
+await rm(deliveredExtension, { recursive: true, force: true })
+await cp(extensionOutput, deliveredExtension, { recursive: true })
+// Modern deploy derives a frozen lockfile. Hoisted output contains real package
+// directories, so Windows junctions cannot bind the bundle to its build path.
 const controller = join(output, 'controller')
 if (relative(root, controller).replaceAll('\\', '/') !== 'dist/public-derp/controller')
   throw new Error('Unsafe controller output')
 await rm(controller, { recursive: true, force: true })
-await run([pnpmScript, '--filter', 'playwriter', 'deploy', '--prod', '--legacy', controller])
+await run(
+  [
+    pnpmScript,
+    '--config.inject-workspace-packages=true',
+    '--config.node-linker=hoisted',
+    '--filter',
+    'playwriter',
+    'deploy',
+    '--prod',
+    controller,
+  ],
+  { ...process.env, npm_config_ignore_scripts: 'true' },
+)
 await cp(join(root, 'dist/tailcat'), join(controller, 'tailcat'), { recursive: true })
 await writeFile(join(controller, 'playwriter.cmd'), '@echo off\r\nnode "%~dp0bin.js" %*\r\n')
 await writeFile(join(controller, 'playwriter-tailcat.cmd'), '@echo off\r\nnode "%~dp0tailcat-bin.js" %*\r\n')
@@ -49,6 +65,7 @@ await cp(join(root, 'LICENSE'), join(output, 'LICENSE'))
 const files = []
 async function inventory(path, prefix = '') {
   for (const entry of (await readdir(path, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
+    if (entry.isSymbolicLink()) throw new Error('Bundle must contain physical files, not build-path links')
     if (entry.isDirectory()) await inventory(join(path, entry.name), prefix + entry.name + '/')
     else if (entry.isFile()) {
       const bytes = await readFile(join(path, entry.name))
@@ -66,6 +83,18 @@ await writeFile(
   join(output, 'delivery.json'),
   JSON.stringify(
     {
+      sourceCommit: execFileSync('git', ['rev-parse', 'HEAD'], {
+        cwd: root,
+        encoding: 'utf8',
+        windowsHide: true,
+      }).trim(),
+      sourceDirty: Boolean(
+        execFileSync('git', ['diff', '--ignore-submodules=dirty', '--name-only', 'HEAD'], {
+          cwd: root,
+          encoding: 'utf8',
+          windowsHide: true,
+        }).trim(),
+      ),
       controller: controller.slice(output.length + 1).replaceAll('\\', '/'),
       node: process.version,
       requiredNode: JSON.parse(

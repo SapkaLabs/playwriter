@@ -28,6 +28,11 @@ chrome.runtime.onConnect.addListener((port) => {
     port.postMessage(data)
   }
   port.onMessage.addListener((data) => {
+    if (import.meta.env.TESTING && data.action === 'testKill') {
+      port.postMessage({ fatal: 'Transport worker terminated for test; sharing revoked' })
+      dispose()
+      return
+    }
     if (typeof data.base64 === 'string') {
       if (data.base64.length > Math.ceil(MAX_CHUNK / 3) * 4) {
         dispose()

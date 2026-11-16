@@ -16,11 +16,11 @@ const selected = new URLSearchParams(location.search).get('tab')
 if (selected) tabs.value = selected
 async function refresh() {
   const state = await chrome.runtime.sendMessage({ action: 'tailcatStatus' })
-  status.textContent = state.status
+  status.textContent = state.status + (state.error ? ' — ' + state.error : '')
   descriptor.value = state.descriptor || ''
   start.disabled = state.status !== 'stopped'
-  stop.disabled = state.status === 'stopped'
-  copy.disabled = !descriptor.value
+  stop.disabled = !state.active
+  copy.disabled = state.status === 'starting' || !descriptor.value
 }
 start.onclick = () => {
   start.disabled = true

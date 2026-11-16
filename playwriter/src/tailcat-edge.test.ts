@@ -18,6 +18,9 @@ it.runIf(process.env.PLAYWRITER_TAILCAT_TESTS === '1')(
   'packaged Edge extension starts without local bootstrap and exchanges real framed bytes',
   async () => {
     const root = resolve('..')
+    const nativePath =
+      process.env.TAILCAT_NATIVE ||
+      join(root, 'tmp/tailcat-assets', process.platform === 'win32' ? 'tailcat.exe' : 'tailcat')
     const fixtureServer = await startTailcatFixture()
     const profile = await mkdtemp(join(tmpdir(), 'playwriter-derp-edge-'))
     const sentinel = createServer((_req, res) => {
@@ -31,7 +34,7 @@ it.runIf(process.env.PLAYWRITER_TAILCAT_TESTS === '1')(
     })
     await new Promise<void>((ok) => sentinel.listen(19987, '127.0.0.1', ok))
     const context = await chromium.launchPersistentContext(profile, {
-      executablePath: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
+      ...(process.env.EDGE_PATH ? { executablePath: process.env.EDGE_PATH } : { channel: 'msedge' }),
       headless: false,
       ignoreDefaultArgs: ['--disable-extensions'],
       args: [
@@ -59,15 +62,11 @@ it.runIf(process.env.PLAYWRITER_TAILCAT_TESTS === '1')(
         relayMode: 'public',
         derpMapURL: PUBLIC_DERP_MAP,
       })
-      native = spawn(
-        join(root, 'tmp/tailcat-assets/tailcat.exe'),
-        ['--key=new', `--derpmap-url=${PUBLIC_DERP_MAP}`, descriptor.addr, '1'],
-        {
-          windowsHide: true,
-          env: { ...process.env, LOCALAPPDATA: profile, APPDATA: profile },
-          stdio: ['pipe', 'pipe', 'pipe'],
-        },
-      )
+      native = spawn(nativePath, ['--key=new', `--derpmap-url=${PUBLIC_DERP_MAP}`, descriptor.addr, '1'], {
+        windowsHide: true,
+        env: { ...process.env, LOCALAPPDATA: profile, APPDATA: profile },
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
       const messages: any[] = []
       const errors: Error[] = []
       const framed = new FramedStream({
@@ -110,7 +109,7 @@ it.runIf(process.env.PLAYWRITER_TAILCAT_TESTS === '1')(
           '--descriptor',
           descriptorFile,
           '--native',
-          join(root, 'tmp/tailcat-assets/tailcat.exe'),
+          nativePath,
           '--listen',
           '127.0.0.1:0',
         ],
@@ -162,7 +161,7 @@ it.runIf(process.env.PLAYWRITER_TAILCAT_TESTS === '1')(
       const secondDescriptor = JSON.parse(await control.getByLabel('Connection information').inputValue())
       const controller = await connectTailcat({
         descriptor: secondDescriptor,
-        nativePath: join(root, 'tmp/tailcat-assets/tailcat.exe'),
+        nativePath,
         stateDirectory: join(profile, 'controller'),
       })
       try {
@@ -280,7 +279,7 @@ it.runIf(process.env.PLAYWRITER_TAILCAT_TESTS === '1')(
         await control.evaluate(() => chrome.runtime.sendMessage({ action: 'tailcatTest', command: 'cut', cut: false }))
         const recovered = await connectTailcat({
           descriptor: secondDescriptor,
-          nativePath: join(root, 'tmp/tailcat-assets/tailcat.exe'),
+          nativePath,
           stateDirectory: join(profile, 'recovered'),
         })
         try {

@@ -1,4 +1,4 @@
-import { exec } from 'node:child_process'
+import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import http from 'node:http'
 import net from 'node:net'
@@ -9,9 +9,8 @@ import os from 'node:os'
 import { startPlayWriterCDPRelayServer, type RelayServer } from './cdp-relay.js'
 import { createFileLogger } from './create-logger.js'
 import { createCdpLogger, type CdpLogger } from './cdp-log.js'
-import { killPortProcess } from './kill-port.js'
 
-const execAsync = promisify(exec)
+const execFileAsync = promisify(execFile)
 const extensionBuildQueues: Map<string, Promise<void>> = new Map()
 
 async function buildExtension({ port, distDir }: { port: number; distDir: string }): Promise<void> {
@@ -22,14 +21,29 @@ async function buildExtension({ port, distDir }: { port: number; distDir: string
     })
     .then(async () => {
       // Build into a per-port dist to avoid parallel test runs overwriting each other.
-      await execAsync(`TESTING=1 PLAYWRITER_PORT=${port} PLAYWRITER_EXTENSION_DIST=${distDir} pnpm build`, {
+      const command = process.env.npm_execpath
+        ? process.execPath
+        : process.platform === 'win32'
+          ? process.env.ComSpec || 'cmd.exe'
+          : 'pnpm'
+      const args = process.env.npm_execpath
+        ? [process.env.npm_execpath, 'build']
+        : process.platform === 'win32'
+          ? ['/d', '/s', '/c', 'pnpm build']
+          : ['build']
+      await execFileAsync(command, args, {
         cwd: '../extension',
+        windowsHide: true,
+        env: { ...process.env, TESTING: '1', PLAYWRITER_PORT: String(port), PLAYWRITER_EXTENSION_DIST: distDir },
       })
     })
 
   extensionBuildQueues.set(
     distDir,
-    buildPromise.finally(() => {}),
+    buildPromise.then(
+      () => {},
+      () => {},
+    ),
   )
   await buildPromise
 }
@@ -94,7 +108,13 @@ export async function setupTestContext({
   executablePath?: string
   relayOptions?: Partial<Parameters<typeof startPlayWriterCDPRelayServer>[0]>
 }): Promise<TestContext> {
-  await killPortProcess({ port }).catch(() => {})
+  // Tests never take over an unknown process. Probe before modifying its per-port
+  // extension output; the real relay bind still rejects any later port race.
+  await new Promise<void>((ok, fail) => {
+    const probe = net.createServer()
+    probe.once('error', fail)
+    probe.listen(port, '127.0.0.1', () => probe.close((error) => (error ? fail(error) : ok())))
+  })
 
   // Use a port-scoped dist folder so parallel tests don't replace each other's extension builds.
   const distDir = `dist-${port}`
@@ -109,7 +129,14 @@ export async function setupTestContext({
   const localLogPath = path.join(process.cwd(), 'relay-server.log')
   const logger = createFileLogger({ logFilePath: localLogPath })
   const cdpLogger = createCdpLogger({ logFilePath: path.join(userDataDir, 'cdp.jsonl') })
-  const relayServer = await startPlayWriterCDPRelayServer({ cdpLogger, ...relayOptions, port, logger, sessionCounterFile })
+  const relayServer = await startPlayWriterCDPRelayServer({
+    cdpLogger,
+    stateDirectory: userDataDir,
+    ...relayOptions,
+    port,
+    logger,
+    sessionCounterFile,
+  })
 
   const extensionPath = path.resolve('../extension', distDir)
   const allExtensionPaths = [extensionPath, ...additionalExtensions].join(',')
@@ -121,8 +148,12 @@ export async function setupTestContext({
     colorScheme: 'dark',
     // Headless Playwright adds --mute-audio, which also silences native tab recording.
     // --disable-audio-output keeps the speakers quiet instead.
-    ignoreDefaultArgs: ['--mute-audio'],
-    args: [`--disable-extensions-except=${allExtensionPaths}`, `--load-extension=${allExtensionPaths}`, '--disable-audio-output'],
+    ignoreDefaultArgs: ['--mute-audio', '--disable-extensions'],
+    args: [
+      `--disable-extensions-except=${allExtensionPaths}`,
+      `--load-extension=${allExtensionPaths}`,
+      '--disable-audio-output',
+    ],
   })
 
   const serviceWorker = await getExtensionServiceWorker(browserContext)

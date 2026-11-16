@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { WebSocket, WebSocketServer } from 'ws'
-import { FramedStream, MAX_CHUNK, MAX_PENDING, PUBLIC_DERP_MAP } from './tailcat-protocol.js'
+import { FramedStream, PendingDataBudget, MAX_CHUNK, PUBLIC_DERP_MAP, type FrameMetadata } from './tailcat-protocol.js'
 
 const exec = promisify(execFile)
 export type Descriptor = {
@@ -91,6 +91,7 @@ export async function connectTailcat(options: {
   listen?: string
   onFailure?(message: string): void
   signal?: AbortSignal
+  testBeforeWrite?(frame: FrameMetadata): Promise<void>
 }) {
   const descriptor = await validateDescriptor(options.descriptor, options.nativePath)
   if (!/^127\.0\.0\.1:(0|[1-9]\d{0,4})$/.test(options.listen ?? '127.0.0.1:0'))
@@ -116,6 +117,7 @@ export async function connectTailcat(options: {
   ])
     delete env[key as keyof typeof env]
   const localId = randomBytes(16).toString('hex')
+  const connectionId = randomBytes(16).toString('hex')
   const path = `/tunnel/${localId}/extension`
   let terminal = false
   let sessionId = ''
@@ -125,8 +127,14 @@ export async function connectTailcat(options: {
   let nativePid = 0
   const requests = new Map<number, ReturnType<typeof setTimeout>>()
   const trace: Array<Record<string, unknown>> = []
-  let queuedBytes = 0
-  const queued: string[] = []
+  const budget = new PendingDataBudget()
+  let attach: () => void = () => {}
+  let cancelAttach: (error: Error) => void = () => {}
+  const attached = new Promise<void>((ok, reject) => {
+    attach = ok
+    cancelAttach = reject
+  })
+  void attached.catch(() => {})
   const server = createServer((_request, response) => {
     response.writeHead(404).end()
   })
@@ -137,9 +145,18 @@ export async function connectTailcat(options: {
   })
   const startup = setTimeout(() => fail('Native startup timed out (60 s)'), 60_000)
   const stream = new FramedStream({
+    budget,
+    beforeWriteRecord: process.env.PLAYWRITER_TAILCAT_TESTS === '1' ? options.testBeforeWrite : undefined,
     onFrame: (frame) => {
       trace.push({ stage: 'controller-frame', at: Date.now(), ...frame })
       if (trace.length > 512) trace.shift()
+      if (frame.direction === 'write' && frame.id !== undefined && frame.method) {
+        if (requests.has(frame.id)) throw new Error('Duplicate outstanding extension request')
+        requests.set(
+          frame.id,
+          setTimeout(() => fail('Fixture command timed out (30 s); outcome unknown'), 30_000),
+        )
+      }
     },
     // The pinned CLI exposes establishment through its first output bytes; the
     // independent 60 s startup timer bounds silent Ping/Dial before that point.
@@ -159,26 +176,30 @@ export async function connectTailcat(options: {
         clearTimeout(requests.get(message.id))
         requests.delete(message.id)
       }
-      if (socket) await sendWS(json)
-      else {
-        const size = Buffer.byteLength(json) * 2
-        if (queuedBytes + size > MAX_PENDING) throw new Error('Initial event queue exceeds 32 MiB')
-        queuedBytes += size
-        queued.push(json)
-      }
+      // Retain only this decoded record until the real relay attaches. Pull-based
+      // native reads backpressure subsequent events rather than duplicating queues.
+      await attached
+      if (!terminal) await sendWS(json)
     },
     onError: (error) => fail(error.message),
   })
   const failures: string[] = []
+  let reportedFailure = false
   function fail(message: string) {
     if (terminal) return
     failures.push(message)
+    reportedFailure = true
     options.onFailure?.(message + '; outcome unknown for dispatched actions; reconnect manually, do not retry blindly')
     void close()
   }
   async function close() {
     if (terminal) return
     terminal = true
+    if (requests.size && !reportedFailure) {
+      const message = 'Controller disconnected with dispatched commands; outcome unknown. Re-observe before retrying.'
+      failures.push(message)
+      options.onFailure?.(message)
+    }
     clearTimeout(startup)
     for (const timer of requests.values()) clearTimeout(timer)
     requests.clear()
@@ -188,8 +209,7 @@ export async function connectTailcat(options: {
     relay?.kill()
     stream.close()
     socket?.terminate()
-    queued.length = 0
-    queuedBytes = 0
+    cancelAttach(new Error('Connection generation is closed'))
     // The relay owns only this connection's in-memory session; process disposal
     // removes it and prevents stock remote redials from reviving the generation.
     // IPC disconnect triggers each child's owned-resource cleanup, including native on Windows.
@@ -214,13 +234,13 @@ export async function connectTailcat(options: {
     throw new Error('Controller startup cancelled')
   }
   async function sendWS(json: string) {
-    if (
-      !socket ||
-      socket.readyState !== WebSocket.OPEN ||
-      socket.bufferedAmount + Buffer.byteLength(json) * 2 > MAX_PENDING
-    )
-      throw new Error('Adapter WS queue exceeded or closed')
-    await new Promise<void>((ok, reject) => socket!.send(json, (error) => (error ? reject(error) : ok())))
+    if (!socket || socket.readyState !== WebSocket.OPEN) throw new Error('Adapter WS queue exceeded or closed')
+    const release = budget.reserve(Buffer.byteLength(json))
+    try {
+      await new Promise<void>((ok, reject) => socket!.send(json, (error) => (error ? reject(error) : ok())))
+    } finally {
+      release()
+    }
   }
   native.once('error', () => fail('Native pipe supervisor failed'))
   native.once('exit', () => fail('Native pipe supervisor exited'))
@@ -239,8 +259,6 @@ export async function connectTailcat(options: {
     await stream.ready
     clearTimeout(startup)
     let claimed = false
-    let wsIngress: Promise<void> = Promise.resolve()
-    let ingressBytes = 0
     server.on('upgrade', (request, peer, head) => {
       if (
         terminal ||
@@ -255,46 +273,19 @@ export async function connectTailcat(options: {
       claimed = true
       wss.handleUpgrade(request, peer, head, (ws) => {
         socket = ws
+        attach()
         ws.on('close', () => fail('Relay adapter connection closed'))
         ws.on('error', () => fail('Relay adapter socket failed'))
         ws.on('message', (data, binary) => {
           if (terminal) return
-          const size =
-            (Array.isArray(data)
-              ? data.reduce((sum, chunk) => sum + chunk.length, 0)
-              : data instanceof ArrayBuffer
-                ? data.byteLength
-                : data.length) * 2
-          if (binary || ingressBytes + size > MAX_PENDING) {
+          if (binary || !Buffer.isBuffer(data)) {
             fail('Invalid or overflowing relay frame')
             return
           }
-          ingressBytes += size
-          const json = data.toString()
-          const message = JSON.parse(json)
-          if (typeof message.id === 'number') {
-            if (requests.size >= 4096) {
-              fail('Too many outstanding commands')
-              return
-            }
-            const timer = setTimeout(() => fail('Fixture command timed out (30 s); outcome unknown'), 30_000)
-            requests.set(message.id, timer)
-          }
-          wsIngress = wsIngress
-            .then(async () => {
-              if (terminal) return
-              await stream.send(json)
-            })
-            .finally(() => {
-              ingressBytes -= size
-            })
-          void wsIngress.catch(() => fail('Native frame write failed; outcome unknown'))
+          // Framing owns this raw record and its shared quota; do not retain an
+          // additional JSON/encoded copy in a second adapter queue.
+          void stream.sendRecord(data).catch(() => fail('Native frame write failed; outcome unknown'))
         })
-        void (async () => {
-          for (const json of queued) await sendWS(json)
-          queued.length = 0
-          queuedBytes = 0
-        })().catch(() => fail('Initial event forwarding failed'))
       })
     })
     await new Promise<void>((ok, reject) => {
@@ -307,6 +298,9 @@ export async function connectTailcat(options: {
     const relayPort = await freePort()
     host = `http://127.0.0.1:${relayPort}`
     relay = ownedChild('./tailcat-relay', [String(relayPort), options.stateDirectory], env)
+    relay.on('message', (message: any) => {
+      if (message.executeFailed) fail('Fixture operation failed; outcome unknown')
+    })
     relay.once('exit', () => fail('Owned relay exited'))
     await new Promise<void>((ok, reject) => {
       const timer = setTimeout(() => reject(new Error('Owned relay startup timed out')), 15_000)
@@ -331,7 +325,7 @@ export async function connectTailcat(options: {
       throw new Error('Real remote hello/targets or explicit session binding failed')
     sessionId = session.id
     return {
-      connectionId: localId,
+      connectionId,
       host,
       sessionId,
       extensionId: expected,

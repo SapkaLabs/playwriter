@@ -57,7 +57,10 @@ self.onmessage = async ({ data }) => {
       const response = await fetch(data.assetRoot + 'main.wasm')
       if (!response.ok) throw new Error('Packaged WASM is unavailable')
       const { instance } = await WebAssembly.instantiate(await response.arrayBuffer(), go.importObject)
-      void go.run(instance).catch(() => self.postMessage({ fatal: 'Go runtime stopped; sharing revoked' }))
+      void go.run(instance).then(
+        () => self.postMessage({ fatal: 'Go runtime stopped; sharing revoked' }),
+        () => self.postMessage({ fatal: 'Go runtime stopped; sharing revoked' }),
+      )
       await loaded
       listener = await self.tailcatListen({
         derpMapURL: PUBLIC_DERP_MAP,

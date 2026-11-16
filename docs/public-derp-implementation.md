@@ -53,6 +53,36 @@ Recorded before writing tests; the owner preapproved all six:
 - Next: source review, lifecycle/race coverage and complete bundle validation;
   retry native UI only through the supported computer tool.
 
+### Lifecycle/review checkpoint, 2026-11-16
+
+- Independent Standards/Spec reviews completed through `6738af1`; findings and
+  resolutions are in [the review report](public-derp-reviews.md).
+- PASS in real Edge: cancelled anchor startup cannot detach a fresh share;
+  stale tab creation and dispatch cannot act after Stop; pre-write click has zero
+  effects; held click response reports unknown outcome with exactly one effect;
+  partial screenshot and JSON fail without replacement operations; whole-script
+  timeout closes its generation; Stop cancels both listener startup barriers.
+- PASS in real Edge: transport-worker loss revokes locally; a fresh bound CLI
+  read fails; old descriptor fails before and after a working fresh descriptor,
+  with its positive-control controller released. Test duration 61.50 s.
+- PASS in real Edge: missing/zero PSKs are rejected; wrong PSK and substituted
+  server key fail over public DERP; original descriptor positive control works
+  afterward (31.00 s).
+- PASS: 77 targeted protocol/local-control/relay/CLI checks, pinned-asset hash and
+  runtime verification, Playwriter and extension builds.
+- FAIL: silent established native preface exceeds 10 s. The smallest proposed
+  dependency adjustment awaits the owner; see
+  [the reproduction](public-derp-preface-blocker.md).
+- Initial complete repository run: 391 passed, five failed, 13 skipped. Four
+  failures came from Windows path/screenshot assumptions; affected checks now
+  pass. Full rerun: 394 passed, two failed, 13 skipped (55.08 s). Native AV1
+  recording on tab close still produces an invalid file in Edge; ordinary capture
+  code is unchanged. A separate 100 ms hidden-click test timed out before its
+  descriptive reason; hidden/covered error tests now allow 1000 ms.
+- UNRUN: native UI matrix, browser/background/extension restart,
+  ten-minute idle/memory measurements, final bundle acceptance and
+  final re-review. No issue is ready to close.
+
 Never record descriptors, PSKs, private-key JSON, capability URLs or browser
 payloads in this file or exported diagnostics. Record pass/fail/unrun separately
 from source observations. Keep each issue open until its acceptance is proven.

@@ -25,6 +25,7 @@ if (process.env.TESTING) {
 // Allow tests to build per-port extension outputs to avoid parallel run conflicts.
 const outDir = process.env.PLAYWRITER_EXTENSION_DIST || 'dist'
 const tailcatAssets = process.env.PLAYWRITER_TAILCAT_ASSETS
+defineEnv['__PLAYWRITER_TAILCAT_ENABLED__'] = JSON.stringify(Boolean(tailcatAssets))
 
 export default defineConfig({
   plugins: [

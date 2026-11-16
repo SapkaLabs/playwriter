@@ -10,7 +10,7 @@ export async function startTailcatFixture() {
 <button id="count">Click counter</button><output id="counter">0</output>
 <label>Unicode text <input id="text"></label><button id="json">Load JSON</button>
 <button id="large">Load oversized JSON</button><button id="evict">Load evicted JSON</button>
-<a href="/next">Navigate fixture</a><div style="height:1800px"></div><p id="bottom">Scroll marker</p>
+<a href="/next">Navigate fixture</a><canvas id="pixels" width="360" height="160"></canvas><div style="height:1800px"></div><p id="bottom">Scroll marker</p>
 <script>
 const history = JSON.parse(sessionStorage.history || '[]');
 window.fixtureHistory = history;
@@ -19,15 +19,20 @@ document.querySelector('#count').onclick = () => { const node = document.querySe
 document.querySelector('#text').oninput = event => append({type:'input', value:event.target.value});
 for (const [id, path] of [['json','json'],['large','oversized'],['evict','evicted']]) document.querySelector('#'+id).onclick = () => { fetch('/'+path+'?run=${nonce}').then(r => r.json()).then(() => console.log('fixture JSON '+path)) };
 console.log('fixture ready ${nonce}');
+const canvas=document.querySelector('#pixels'),ctx=canvas.getContext('2d'),image=ctx.createImageData(360,160);
+let seed=17;for(let i=0;i<image.data.length;i+=4){for(let c=0;c<3;c++){seed=(seed*1664525+1013904223)>>>0;image.data[i+c]=seed>>>24}image.data[i+3]=255}ctx.putImageData(image,0,0);
 </script>`
   const server = createServer((request, response) => {
     const path = new URL(request.url || '/', 'http://fixture').pathname
     requests[path] = (requests[path] || 0) + 1
-    if (['/json', '/oversized', '/evicted'].includes(path)) {
+    if (['/json', '/oversized', '/evicted', '/transfer'].includes(path)) {
       const json = JSON.stringify({
         nonce,
         message: 'Привіт 👋 漢字',
-        padding: 'x'.repeat(path === '/oversized' ? 65537 : path === '/evicted' ? 8192 : 16),
+        padding:
+          path === '/transfer'
+            ? '\\'.repeat(30000)
+            : 'x'.repeat(path === '/oversized' ? 65537 : path === '/evicted' ? 8192 : 16),
       })
       response
         .writeHead(200, {

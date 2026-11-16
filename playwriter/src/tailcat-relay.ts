@@ -9,6 +9,9 @@ const relay = await startPlayWriterCDPRelayServer({
   allowLocalExtensions: false,
   cdpLogger: { log: () => {}, flush: async () => {}, logFilePath: '' },
   logger: { log: () => {}, error: () => {} },
+  onExecuteFailure: () => {
+    process.send?.({ executeFailed: true })
+  },
   extensionTimeouts: { command: 30_000, awaitPromise: 30_000 },
 })
 process.send?.({ ready: true })

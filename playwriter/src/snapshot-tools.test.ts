@@ -6,6 +6,7 @@ import type { AriaSnapshotNode } from './aria-snapshot.js'
 import path from 'node:path'
 import fs from 'node:fs'
 import os from 'node:os'
+import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 import { getCdpUrl } from './utils.js'
 import { getCDPSessionForPage } from './cdp-session.js'
@@ -92,7 +93,9 @@ describe('Snapshot & Screenshot Tests', () => {
     console.log('Full page screenshot dimensions:', fullPageDimensions)
     expect(fullPageDimensions.width).toBeGreaterThan(0)
     expect(fullPageDimensions.height).toBeGreaterThan(0)
-    expect(fullPageDimensions.width).toBeGreaterThanOrEqual(viewportDimensions.width!)
+    // Classic Windows scrollbars occupy viewport pixels outside the document.
+    const documentWidth = await cdpPage!.evaluate(() => document.documentElement.clientWidth)
+    expect(fullPageDimensions.width).toBeGreaterThanOrEqual(documentWidth)
 
     testCtx!.relayServer.off('cdp:command', commandHandler)
 
@@ -100,10 +103,11 @@ describe('Snapshot & Screenshot Tests', () => {
     // example.com is live: its full page height changes by a pixel with fonts
     const fullPageClip = capturedCommands[1]?.params?.clip
     expect(fullPageClip?.height).toBeGreaterThanOrEqual(720)
+    expect(fullPageClip?.width).toBe(documentWidth)
     expect(
       capturedCommands.map((c) => ({
         method: c.method,
-        params: c === capturedCommands[1] ? { ...c.params, clip: { ...fullPageClip, height: 'page height' } } : c.params,
+        params: c === capturedCommands[1] ? { ...c.params, clip: { ...fullPageClip, height: 'page height', width: 'document width' } } : c.params,
       })),
     ).toMatchInlineSnapshot(`
       [
@@ -128,7 +132,7 @@ describe('Snapshot & Screenshot Tests', () => {
             "clip": {
               "height": "page height",
               "scale": 1,
-              "width": 1280,
+              "width": "document width",
               "x": 0,
               "y": 0,
             },
@@ -520,12 +524,20 @@ describe('Snapshot & Screenshot Tests', () => {
     const cdpSession = await getCDPSessionForPage({ page: cdpPage! })
 
     const layoutMetrics = await cdpSession.send('Page.getLayoutMetrics')
+    const widths = await cdpPage!.evaluate(() => ({
+      document: document.documentElement.clientWidth,
+      visual: window.visualViewport!.width,
+    }))
+    expect(layoutMetrics.cssLayoutViewport.clientWidth).toBe(widths.document)
+    expect(layoutMetrics.cssVisualViewport.clientWidth).toBe(widths.visual)
+    expect(layoutMetrics.layoutViewport.clientWidth).toBe(layoutMetrics.cssLayoutViewport.clientWidth)
+    expect(layoutMetrics.visualViewport.clientWidth).toBe(layoutMetrics.cssVisualViewport.clientWidth)
 
     const normalized = {
-      cssLayoutViewport: layoutMetrics.cssLayoutViewport,
-      cssVisualViewport: layoutMetrics.cssVisualViewport,
-      layoutViewport: layoutMetrics.layoutViewport,
-      visualViewport: layoutMetrics.visualViewport,
+      cssLayoutViewport: { ...layoutMetrics.cssLayoutViewport, clientWidth: 'document width' },
+      cssVisualViewport: { ...layoutMetrics.cssVisualViewport, clientWidth: 'visual width' },
+      layoutViewport: { ...layoutMetrics.layoutViewport, clientWidth: 'document width' },
+      visualViewport: { ...layoutMetrics.visualViewport, clientWidth: 'visual width' },
       devicePixelRatio:
         layoutMetrics.cssVisualViewport.clientWidth > 0
           ? layoutMetrics.visualViewport.clientWidth / layoutMetrics.cssVisualViewport.clientWidth
@@ -533,42 +545,42 @@ describe('Snapshot & Screenshot Tests', () => {
     }
 
     expect(normalized).toMatchInlineSnapshot(`
-          {
-            "cssLayoutViewport": {
-              "clientHeight": 720,
-              "clientWidth": 1280,
-              "pageX": 0,
-              "pageY": 0,
-            },
-            "cssVisualViewport": {
-              "clientHeight": 720,
-              "clientWidth": 1280,
-              "offsetX": 0,
-              "offsetY": 0,
-              "pageX": 0,
-              "pageY": 0,
-              "scale": 1,
-              "zoom": 1,
-            },
-            "devicePixelRatio": 1,
-            "layoutViewport": {
-              "clientHeight": 720,
-              "clientWidth": 1280,
-              "pageX": 0,
-              "pageY": 0,
-            },
-            "visualViewport": {
-              "clientHeight": 720,
-              "clientWidth": 1280,
-              "offsetX": 0,
-              "offsetY": 0,
-              "pageX": 0,
-              "pageY": 0,
-              "scale": 1,
-              "zoom": 1,
-            },
-          }
-        `)
+      {
+        "cssLayoutViewport": {
+          "clientHeight": 720,
+          "clientWidth": "document width",
+          "pageX": 0,
+          "pageY": 0,
+        },
+        "cssVisualViewport": {
+          "clientHeight": 720,
+          "clientWidth": "visual width",
+          "offsetX": 0,
+          "offsetY": 0,
+          "pageX": 0,
+          "pageY": 0,
+          "scale": 1,
+          "zoom": 1,
+        },
+        "devicePixelRatio": 1,
+        "layoutViewport": {
+          "clientHeight": 720,
+          "clientWidth": "document width",
+          "pageX": 0,
+          "pageY": 0,
+        },
+        "visualViewport": {
+          "clientHeight": 720,
+          "clientWidth": "visual width",
+          "offsetX": 0,
+          "offsetY": 0,
+          "pageX": 0,
+          "pageY": 0,
+          "scale": 1,
+          "zoom": 1,
+        },
+      }
+    `)
 
     const windowDpr = await cdpPage!.evaluate(() => (globalThis as any).devicePixelRatio)
     console.log('window.devicePixelRatio:', windowDpr)
@@ -740,7 +752,7 @@ describe('Snapshot & Screenshot Tests', () => {
     const { showAriaRefLabels, hideAriaRefLabels } = await import('./aria-snapshot.js')
 
     // Create assets folder for screenshots
-    const assetsDir = path.join(path.dirname(new URL(import.meta.url).pathname), 'assets')
+    const assetsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'assets')
     if (!fs.existsSync(assetsDir)) {
       fs.mkdirSync(assetsDir, { recursive: true })
     }

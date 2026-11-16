@@ -5,6 +5,33 @@ export const MAX_PENDING = 32 * 1024 * 1024
 export const MAX_CHUNK = 64 * 1024
 const PREFACE = new Uint8Array([80, 87, 84, 67, 49, 10])
 const encoder = new TextEncoder()
+/** One quota for all retained application copies at an endpoint. */
+export class PendingDataBudget {
+  private used = 0
+  reserve(bytes: number): () => void {
+    if (!Number.isSafeInteger(bytes) || bytes < 0 || this.used + bytes > MAX_PENDING) {
+      throw new Error('Pending data exceeds 32 MiB')
+    }
+    this.used += bytes
+    let released = false
+    return () => {
+      if (!released) {
+        this.used -= bytes
+        released = true
+      }
+    }
+  }
+}
+
+export function utf8Length(text: string): number {
+  let bytes = 0
+  for (let i = 0; i < text.length; i++) {
+    const code = text.codePointAt(i)!
+    bytes += code < 128 ? 1 : code < 2048 ? 2 : code < 65536 ? 3 : 4
+    if (code > 65535) i++
+  }
+  return bytes
+}
 export type FrameMetadata = {
   direction: 'read' | 'write'
   id?: number
@@ -74,7 +101,8 @@ export class FramedStream {
   private headerUsed = 0
   private body: Uint8Array | null = null
   private bodyUsed = 0
-  private pending = 0
+  private releaseBody: (() => void) | undefined
+  private readonly budget: PendingDataBudget
   private writes: Promise<void> = Promise.resolve()
   private stopped = false
   private timer: ReturnType<typeof setTimeout> | undefined
@@ -90,8 +118,11 @@ export class FramedStream {
       handshakeMs?: number
       handshakeStartsOnRead?: boolean
       onFrame?(frame: FrameMetadata): void
+      beforeWriteRecord?(frame: FrameMetadata): Promise<void>
+      budget?: PendingDataBudget
     },
   ) {
+    this.budget = options.budget ?? new PendingDataBudget()
     this.ready = new Promise((resolve, reject) => {
       this.resolveReady = resolve
       this.rejectReady = reject
@@ -100,7 +131,7 @@ export class FramedStream {
   }
 
   async start(): Promise<void> {
-    if (!this.options.handshakeStartsOnRead) this.startHandshakeTimer()
+    if (!this.options.handshakeStartsOnRead && this.preface < PREFACE.length) this.startHandshakeTimer()
     try {
       await this.options.write(PREFACE)
     } catch {
@@ -132,7 +163,7 @@ export class FramedStream {
           if (this.headerUsed < 4) continue
           const length = new DataView(this.header.buffer).getUint32(0)
           if (length < 1 || length > MAX_RECORD) throw new Error('Record length outside 1..16777216')
-          if (this.pending + length * 2 > MAX_PENDING) throw new Error('Pending data exceeds 32 MiB')
+          this.releaseBody = this.budget.reserve(length)
           this.body = new Uint8Array(length)
           this.bodyUsed = 0
         }
@@ -141,14 +172,19 @@ export class FramedStream {
         offset += take
         this.bodyUsed += take
         if (this.bodyUsed === this.body.length) {
-          const json = new TextDecoder('utf-8', { fatal: true }).decode(this.body)
-          validate(json)
-          this.options.onFrame?.(metadata(json, this.body.length, 'read'))
-          // Release the assembled encoded copy before the consumer retains or
-          // re-encodes the JSON (e.g. WebSocket.send), keeping the same budget.
-          this.body = null
-          this.headerUsed = 0
-          await this.options.onMessage(json)
+          const releaseJSON = this.budget.reserve(this.body.length)
+          try {
+            const json = new TextDecoder('utf-8', { fatal: true }).decode(this.body)
+            validate(json)
+            this.options.onFrame?.(metadata(json, this.body.length, 'read'))
+            this.body = null
+            this.releaseBody?.()
+            this.releaseBody = undefined
+            this.headerUsed = 0
+            await this.options.onMessage(json)
+          } finally {
+            releaseJSON()
+          }
         }
       }
     } catch (error) {
@@ -158,41 +194,73 @@ export class FramedStream {
 
   send(json: string): Promise<void> {
     if (this.stopped) return Promise.reject(new Error('Connection generation is closed'))
+    let releaseBytes: (() => void) | undefined
+    let releaseJSON: (() => void) | undefined
     try {
+      const length = utf8Length(json)
+      if (!length || length > MAX_RECORD) throw new Error('Record length outside 1..16777216')
+      // Reserve before encoding/retaining the next full copy.
+      releaseJSON = this.budget.reserve(length)
+      releaseBytes = this.budget.reserve(length)
       validate(json)
+      const bytes = encoder.encode(json)
+      releaseJSON()
+      releaseJSON = undefined
+      return this.queueRecord(bytes, releaseBytes)
     } catch (error) {
+      releaseJSON?.()
+      releaseBytes?.()
       this.fail(error as Error)
       return Promise.reject(error)
     }
-    const bytes = encoder.encode(json)
-    // The queue retains only bytes, not the caller's JSON string. Chunk reserves
-    // include pipe/worker/base64 bridge copies; writes use views of this buffer.
-    const reserved = bytes.length + 4 * MAX_CHUNK
-    if (
-      !bytes.length ||
-      bytes.length > MAX_RECORD ||
-      this.pending + reserved + (this.body?.length ?? 0) * 2 > MAX_PENDING
-    ) {
-      const error = new Error('Record or pending data limit exceeded')
-      this.fail(error)
+  }
+
+  /** Takes ownership of a raw WS record, avoiding another full encoded copy. */
+  sendRecord(bytes: Uint8Array): Promise<void> {
+    if (this.stopped) return Promise.reject(new Error('Connection generation is closed'))
+    let releaseBytes: (() => void) | undefined
+    let releaseJSON: (() => void) | undefined
+    try {
+      if (!bytes.length || bytes.length > MAX_RECORD) throw new Error('Record length outside 1..16777216')
+      releaseBytes = this.budget.reserve(bytes.length)
+      releaseJSON = this.budget.reserve(bytes.length)
+      validate(new TextDecoder('utf-8', { fatal: true }).decode(bytes))
+      releaseJSON()
+      releaseJSON = undefined
+      return this.queueRecord(bytes, releaseBytes)
+    } catch (error) {
+      releaseJSON?.()
+      releaseBytes?.()
+      this.fail(error as Error)
       return Promise.reject(error)
     }
-    this.pending += reserved
+  }
+
+  private queueRecord(bytes: Uint8Array, releaseBytes: () => void): Promise<void> {
     const work = this.writes
       .then(async () => {
         await this.ready
         if (this.stopped) throw new Error('Connection generation is closed')
         const header = new Uint8Array(4)
         new DataView(header.buffer).setUint32(0, bytes.length)
-        this.options.onFrame?.(metadata(new TextDecoder().decode(bytes), bytes.length, 'write'))
+        const frame = metadata(new TextDecoder().decode(bytes), bytes.length, 'write')
+        await this.options.beforeWriteRecord?.(frame)
+        if (this.stopped) throw new Error('Connection generation is closed')
+        this.options.onFrame?.(frame)
         await this.options.write(header)
         for (let i = 0; i < bytes.length; i += MAX_CHUNK) {
           if (this.stopped) throw new Error('Connection generation is closed')
-          await this.options.write(bytes.subarray(i, i + MAX_CHUNK))
+          const chunk = bytes.subarray(i, i + MAX_CHUNK)
+          const releaseBridge = this.budget.reserve(chunk.length * 4)
+          try {
+            await this.options.write(chunk)
+          } finally {
+            releaseBridge()
+          }
         }
       })
       .finally(() => {
-        this.pending -= reserved
+        releaseBytes()
       })
     this.writes = work.catch(() => {})
     return work.catch((error) => {
@@ -215,6 +283,8 @@ export class FramedStream {
     clearTimeout(this.timer)
     this.rejectReady(new Error('Connection generation is closed'))
     this.body = null
+    this.releaseBody?.()
+    this.releaseBody = undefined
   }
   private fail(error: Error): void {
     if (!this.stopped) {

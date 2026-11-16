@@ -1,7 +1,45 @@
 import { describe, expect, it } from 'vitest'
-import { FramedStream } from './tailcat-protocol.js'
+import { FramedStream, PendingDataBudget } from './tailcat-protocol.js'
 
 describe('public Tailcat framed byte stream', () => {
+  it('shares one endpoint budget across framed queues and its bridge', async () => {
+    const budget = new PendingDataBudget()
+    const releaseBridge = budget.reserve(24 * 1024 * 1024)
+    const stream = new FramedStream({ budget, write: async () => {}, onMessage: async () => {}, onError: () => {} })
+    await stream.start()
+    await stream.receive(new Uint8Array([80, 87, 84, 67, 49, 10]))
+    const record = new TextEncoder().encode('{"id":1,"result":"' + 'x'.repeat(5 * 1024 * 1024) + '"}')
+    await expect(stream.sendRecord(record)).rejects.toThrow('32 MiB')
+    releaseBridge()
+    stream.close()
+  })
+  it('writes no action bytes if its pre-write wait resumes after the generation closes', async () => {
+    const writes: number[][] = []
+    let release = () => {}
+    const hold = new Promise<void>((ok) => {
+      release = ok
+    })
+    let held = false
+    const stream = new FramedStream({
+      write: async (bytes) => {
+        writes.push([...bytes])
+      },
+      onMessage: async () => {},
+      onError: () => {},
+      beforeWriteRecord: async () => {
+        held = true
+        await hold
+      },
+    })
+    await stream.start()
+    await stream.receive(new Uint8Array([80, 87, 84, 67, 49, 10]))
+    const action = stream.send('{"method":"ping"}')
+    await expect.poll(() => held).toBe(true)
+    stream.close()
+    release()
+    await expect(action).rejects.toThrow('closed')
+    expect(writes).toEqual([[80, 87, 84, 67, 49, 10]])
+  })
   it('exchanges the exact v1 preface and reads a split Unicode extension record', async () => {
     const sent: number[][] = []
     const received: string[] = []

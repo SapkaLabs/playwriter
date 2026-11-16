@@ -179,8 +179,9 @@ export async function startPlayWriterCDPRelayServer({
   sessionCounterFile,
   onDrained,
   extensionTimeouts,
-  stateDirectory,
+  stateDirectory = process.env.PLAYWRITER_STATE_DIRECTORY,
   allowLocalExtensions = true,
+  onExecuteFailure,
 }: {
   port?: number
   host?: string
@@ -197,6 +198,8 @@ export async function startPlayWriterCDPRelayServer({
   stateDirectory?: string
   /** Remote-only supervisors must never accept an ordinary local extension. */
   allowLocalExtensions?: boolean
+  /** Dedicated connection supervisors dispose a failed generation; ordinary relays omit this. */
+  onExecuteFailure?: () => void
 } = {}): Promise<RelayServer> {
   const timeouts = { ...DEFAULT_EXTENSION_TIMEOUTS, ...extensionTimeouts }
   const humanInput = createHumanInput({ log: (message) => logger?.log(message) })
@@ -3032,7 +3035,8 @@ export async function startPlayWriterCDPRelayServer({
     try {
       const body: { sessionId: string | number; code: string; timeout?: number } = await c.req.json()
       const sessionId = normalizeSessionId(body.sessionId)
-      const { code, timeout = DEFAULT_EXEC_TIMEOUT } = body
+      const { code } = body
+      const timeout = onExecuteFailure ? Math.min(body.timeout ?? 30_000, 30_000) : body.timeout ?? DEFAULT_EXEC_TIMEOUT
 
       if (!sessionId || !code) {
         return c.json({ error: 'sessionId and code are required' }, 400)
@@ -3068,9 +3072,11 @@ export async function startPlayWriterCDPRelayServer({
       // Use the cloudTracking snapshot captured before execute (not a fresh
       // map lookup) so long-running executes that outlive idle cleanup still
       // report isCloud correctly.
+      if (result.isError) onExecuteFailure?.()
       return c.json({ ...result, isCloud: Boolean(cloudTracking) })
     } catch (error: any) {
       logger?.error('Execute endpoint error:', error)
+      onExecuteFailure?.()
       return c.json({ text: `Server error: ${error.message}`, images: [], screenshots: [], isError: true }, 500)
     } finally {
       if (!outgoing) {

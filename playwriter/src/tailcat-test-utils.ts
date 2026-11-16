@@ -10,12 +10,13 @@ import { startTailcatFixture } from './tailcat-fixture.js'
 import { connectTailcat } from './tailcat-controller.js'
 
 export const tailcatTestsEnabled = process.env.PLAYWRITER_TAILCAT_TESTS === '1'
-export async function setupTailcatTest() {
+export async function setupTailcatTest(options: { extensionDirectory?: string } = {}) {
   const root = resolve('..')
   const nativePath =
     process.env.TAILCAT_NATIVE ||
     join(root, 'tmp/tailcat-assets', process.platform === 'win32' ? 'tailcat.exe' : 'tailcat')
   const profile = await mkdtemp(join(tmpdir(), 'playwriter-derp-lifecycle-'))
+  const extensionDirectory = options.extensionDirectory || join(root, 'extension/dist-tailcat')
   const fixture = await startTailcatFixture()
   const sentinel = createServer((_request, response) => response.end('healthy sentinel'))
   let rejected = 0
@@ -33,8 +34,8 @@ export async function setupTailcatTest() {
       headless: false,
       ignoreDefaultArgs: ['--disable-extensions'],
       args: [
-        `--disable-extensions-except=${join(root, 'extension/dist-tailcat')}`,
-        `--load-extension=${join(root, 'extension/dist-tailcat')}`,
+        `--disable-extensions-except=${extensionDirectory}`,
+        `--load-extension=${extensionDirectory}`,
         '--no-first-run',
         '--no-default-browser-check',
       ],

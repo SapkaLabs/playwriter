@@ -1,7 +1,9 @@
 # Native stream-establishment deadline blocker
 
-Status: reproduced; proposed adjustment awaits owner decision. No Tailcat source
-or cryptography has been changed.
+Status: owner approved the Playwriter-owned launcher on 2026-11-16. The retained
+real public-DERP silent-peer test now passes (15.25 s total), with the 10-second
+preface timer starting on the launcher's post-Dial notification. No Tailcat
+source, cryptography or remote wire protocol has been changed.
 
 ## Reproduction and requirement
 
@@ -54,6 +56,7 @@ to own/terminate the native child on IPC loss. Both native assets and WASM use
 the same approved Tailcat pin and Go toolchain. No protocol bytes, remote
 extension feature, relay destination, key format, PSK or encryption changes.
 
-This replaces the approved upstream-CLI-only data invocation with a local
-launcher using the same library, so it is presented for an explicit scope
-decision. The exact-deadline acceptance row stays failed until resolved.
+The owner approved replacing the upstream-CLI-only data invocation with this
+local launcher using the same library. The launcher and unchanged CLI are both
+packaged; the CLI remains the descriptor parser. Complete acceptance must still
+be rerun against the resulting developer bundles.

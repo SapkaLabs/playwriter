@@ -133,6 +133,23 @@ Recorded before writing tests; the owner preapproved all six:
   experiments was blocked by automatic review; ZIP construction names only the
   four delivery paths, excluding those directories.
 
+### Approved launcher checkpoint
+
+The owner approved the small Playwriter-owned Go launcher described in
+[the deadline decision](public-derp-preface-blocker.md). The real silent-peer
+regression now passes (15.25 s) with the unchanged 10 s deadline beginning at the
+local post-Dial notification. The original CLI, Tailcat library, WASM and wire
+protocol remain unchanged. Provisioning and typecheck pass; a fresh independent
+Standards/Spec review found no new material code defect.
+
+The most recent ordinary full run before the disposable browser scaling fix
+reported 408 passed, three failed, 21 skipped and six errors. Two geometry
+assertions now pass with the test browser pinned to device scale 1; the original
+assertions remain. The static recording test passes alone (1.07 s). A complete
+rerun is required; prior green runs do not supersede this later failed attempt.
+The owner also confirmed the interactive desktop is ready for a native UI retry.
+All implementation issues stay open pending the refreshed acceptance evidence.
+
 Never record descriptors, PSKs, private-key JSON, capability URLs or browser
 payloads in this file or exported diagnostics. Record pass/fail/unrun separately
 from source observations. Keep each issue open until its acceptance is proven.

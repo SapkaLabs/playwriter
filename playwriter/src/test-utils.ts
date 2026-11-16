@@ -153,6 +153,9 @@ export async function setupTestContext({
       `--disable-extensions-except=${allExtensionPaths}`,
       `--load-extension=${allExtensionPaths}`,
       '--disable-audio-output',
+      // Native Windows display scaling otherwise rounds requested CSS viewport
+      // widths differently across monitors/desktops (777 can become 778).
+      '--force-device-scale-factor=1',
     ],
   })
 

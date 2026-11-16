@@ -233,14 +233,17 @@ describe.runIf(tailcatTestsEnabled)('public DERP lifecycle and no replay', () =>
       const descriptor = await test.start()
       await test.testControl('barrierArm', { name: 'preface' })
       let failed = false
+      let reason = ''
       const connection = test.connect(descriptor, { signal: abort.signal })
-      void connection.catch(() => {
+      void connection.catch((error) => {
+        reason = error.message
         failed = true
       })
       await expect
         .poll(() => test.testControl('barrierStatus', { name: 'preface' }), { timeout: 15_000 })
         .toMatchObject({ blocked: 1 })
       await expect.poll(() => failed, { timeout: 12_000 }).toBe(true)
+      expect(reason).toContain('Preface exchange timed out')
     } finally {
       abort.abort()
       await test.stop()

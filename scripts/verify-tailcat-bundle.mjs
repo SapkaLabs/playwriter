@@ -51,6 +51,11 @@ try {
   if (!controller.stdout.includes('connect --descriptor')) throw new Error('Relocated controller unavailable')
   const native = join(relocated, 'tailcat', process.platform === 'win32' ? 'tailcat.exe' : 'tailcat')
   await run(native, ['--help'], options)
+  await run(
+    join(relocated, 'tailcat', process.platform === 'win32' ? 'tailcat-launcher.exe' : 'tailcat-launcher'),
+    ['--help'],
+    options,
+  )
   console.log(
     JSON.stringify({
       sourceCommit: manifest.sourceCommit,

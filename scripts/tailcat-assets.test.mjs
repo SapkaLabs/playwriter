@@ -39,5 +39,10 @@ test('pinned dependency provisioning emits matching native, WASM and Go runtime 
   )
   assert.equal(verification.status, 0, verification.stderr)
   assert.ok(manifest.files.some((f) => f.path === (process.platform === 'win32' ? 'tailcat.exe' : 'tailcat')))
+  const launcherName = process.platform === 'win32' ? 'tailcat-launcher.exe' : 'tailcat-launcher'
+  assert.ok(manifest.files.some((f) => f.path === launcherName))
+  const launcher = spawnSync(resolve('tmp/tailcat-assets', launcherName), ['--help'], { encoding: 'utf8' })
+  assert.equal(launcher.status, 0, launcher.stderr)
+  assert.match(launcher.stdout, /Playwriter Tailcat launcher/)
   assert.ok(manifest.files.some((f) => f.path === 'notices/tailcat-LICENSE'))
 })

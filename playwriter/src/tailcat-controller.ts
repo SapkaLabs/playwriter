@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { spawn, execFile, type ChildProcess } from 'node:child_process'
 import { createServer } from 'node:http'
 import { mkdir } from 'node:fs/promises'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { WebSocket, WebSocketServer } from 'ws'
@@ -139,9 +139,24 @@ export async function connectTailcat(options: {
     response.writeHead(404).end()
   })
   const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 * 1024, perMessageDeflate: false })
-  const native = ownedChild('./tailcat-native', [options.nativePath, descriptor.addr], env)
+  let established!: () => void
+  let rejectEstablished!: (error: Error) => void
+  const establishment = new Promise<void>((ok, reject) => {
+    established = ok
+    rejectEstablished = reject
+  })
+  void establishment.catch(() => {})
+  const launcherPath = join(
+    dirname(options.nativePath),
+    process.platform === 'win32' ? 'tailcat-launcher.exe' : 'tailcat-launcher',
+  )
+  const native = ownedChild('./tailcat-native', [launcherPath, descriptor.addr], env)
   native.on('message', (message: any) => {
     if (message.nativePid) nativePid = message.nativePid
+    if (!terminal && message.stage === 'stream-established') {
+      clearTimeout(startup)
+      established()
+    }
     if (process.env.PLAYWRITER_TAILCAT_TESTS === '1' && Number.isSafeInteger(message.pipeReadBytes)) {
       trace.push({ stage: 'native-child-read', at: Date.now(), bytes: message.pipeReadBytes })
       if (trace.length > 512) trace.shift()
@@ -162,10 +177,6 @@ export async function connectTailcat(options: {
         )
       }
     },
-    // The pinned CLI has no stream-established notification. This bounds only a
-    // non-silent preface; the silent-stream 10 s gate remains failed until the
-    // owner decision in docs/public-derp-preface-blocker.md is resolved.
-    handshakeStartsOnRead: true,
     write: (bytes) =>
       new Promise((ok, reject) => {
         if (terminal || !native.stdin) {
@@ -206,6 +217,7 @@ export async function connectTailcat(options: {
       options.onFailure?.(message)
     }
     clearTimeout(startup)
+    rejectEstablished(new Error('Native stream establishment cancelled'))
     for (const timer of requests.values()) clearTimeout(timer)
     requests.clear()
     // Terminate the dedicated relay before releasing its browser socket. Otherwise
@@ -269,8 +281,13 @@ export async function connectTailcat(options: {
       })
       .catch(() => fail('Native frame ingress failed'))
   })
+  // IPC and stdout are independent pipes. Hold binary ingress until the local
+  // launcher notification arrives; neither a peer byte nor buffering proves Dial.
+  native.stdout!.pause()
   try {
+    await establishment
     await stream.start()
+    native.stdout!.resume()
     await stream.ready
     clearTimeout(startup)
     let claimed = false

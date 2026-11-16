@@ -1,13 +1,24 @@
 // Pipe supervisor: IPC loss also kills the owned native child on Windows.
 import { spawn } from 'node:child_process'
-const child = spawn(
-  process.argv[2],
-  ['--key=new', '--derpmap-url=https://tailcat.dev/derpmap.json', process.argv[3], '1'],
-  {
-    windowsHide: true,
-    stdio: ['pipe', 'pipe', 'ignore'],
-  },
-)
+const child = spawn(process.argv[2], [process.argv[3]], {
+  windowsHide: true,
+  stdio: ['pipe', 'pipe', 'pipe'],
+})
+let control = ''
+let established = false
+child.stderr.setEncoding('utf8').on('data', (chunk: string) => {
+  control += chunk
+  const newline = control.indexOf('\n')
+  if (control.length > 256 || (newline >= 0 && (established || control !== '{"stage":"stream-established"}\n'))) {
+    child.kill()
+    return
+  }
+  if (newline >= 0) {
+    established = true
+    control = ''
+    if (process.connected) process.send?.({ stage: 'stream-established' }, () => {})
+  }
+})
 process.stdin.pipe(child.stdin)
 if (process.env.PLAYWRITER_TAILCAT_TESTS === '1')
   child.stdout.on('data', (bytes: Buffer) => {

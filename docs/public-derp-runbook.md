@@ -1,10 +1,10 @@
 # Windows Edge public DERP developer PoC
 
-Status: implementation checkpoint, **acceptance incomplete**. The native
-silent-peer deadline is failed; native browser-owned UI validation and parts of
-the restart/authentication matrix are unrun. Consult
-[the checkpoint](public-derp-implementation.md) and
-[the pending dependency decision](public-derp-preface-blocker.md) before testing.
+Status: implementation checkpoint, **acceptance incomplete**. Native browser-owned
+UI validation and final artifact revalidation remain pending. Restart and
+authentication checks passed on the earlier runtime. The owner-approved native
+launcher fixes the silent-peer deadline; see [the checkpoint](public-derp-implementation.md)
+and [the dependency decision](public-derp-preface-blocker.md).
 
 ## Build
 
@@ -97,8 +97,8 @@ pnpm --filter playwriter exec vitest run src/tailcat-edge.test.ts
 pnpm --filter playwriter exec vitest run src/tailcat-lifecycle.test.ts
 ```
 
-The silent-established-peer case currently fails by design to retain the
-reproduced contract defect. Automated DOM clicks are partial evidence: they do
+The silent-established-peer case retains the original defect reproduction and
+must pass with the owned launcher. Automated DOM clicks are partial evidence: they do
 not replace native browser-owned UI Stop acceptance. Tests use owned temporary
 profiles and isolated state; disposable diagnostic directories are prefixed
 `playwriter-regression-` in the OS temp directory.
@@ -128,10 +128,12 @@ the dedicated worker, including a pending listener startup and its key material.
 The offscreen document itself also serves clipboard/audio functions and stays
 separate from that worker's lifetime. Runtime/port loss requires a fresh Start.
 
-Native map cache and keys use separate upstream namespaces. The controller sets
-Windows `LOCALAPPDATA=<run>/cache` and `APPDATA=<run>/config` (and corresponding
-XDG variables). Observed upstream map paths are
-`<UserCacheDir>/tailcat/derpmap-<URL-query-escaped>.json` plus `.etag`; named keys
-would use `<UserConfigDir>/tailcat/keys/<name>.private.json`. The `--key=new`
-client path generates a fresh key without loading a named key. Test cleanup
-removes only the owned run; personal Tailcat caches/configuration are untouched.
+The controller packages the unchanged pinned CLI for address parsing and a
+Playwriter-owned `tailcat-launcher` built against that same library. The launcher
+uses a fresh in-memory node key, the fixed public map, and port 1; it reads no
+named keys. Its map cache is the library's process-local in-memory default.
+Only a fixed local stderr notification crosses to the supervisor after TCP Dial;
+stdout remains the binary protocol. Startup is bounded to 60 s and the preface
+timer begins at that notification with its unchanged 10 s limit. The controller
+also isolates Windows `LOCALAPPDATA`/`APPDATA` and XDG directories to the owned
+run. Test cleanup removes only that run; personal caches/configuration stay intact.

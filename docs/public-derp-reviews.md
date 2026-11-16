@@ -98,3 +98,28 @@ validation, performance evidence and regression success remain obligations.
 
 Spec recheck: four P2 findings; three have source fixes and affected checks,
 and the stream-establishment deadline remains unresolved.
+
+## Launcher review after owner approval
+
+The owner approved the narrow local launcher adjustment on 2026-11-16. This
+supersedes the pending-decision status above. The retained real public-DERP
+silent-peer test passes (15.25 s), resolving the original preface finding.
+
+### Standards
+
+Fresh independent review found no new documented-standard breach or material
+heuristic concern. Paths/commands remain portable, the pinned library and CLI
+remain unchanged, and the change includes a `playwriter` patch changeset. The
+supervisor has a concrete process-ownership responsibility.
+
+### Spec
+
+Fresh independent review found no new material implementation defect or scope
+creep. The approved launcher uses a fresh in-memory key, fixed public map and
+port 1. Its one post-Dial local notification starts the existing 10 s preface
+timer after the 60 s startup stage; stdout remains the binary stream. The
+upstream CLI remains the parser. Final artifact-bound tests, native Start/Copy/
+Stop matrix and refreshed timing/memory evidence remain acceptance obligations.
+
+Launcher review: zero Standards findings; zero new Spec code findings, three
+acceptance-evidence obligations. These reports are separate from runtime results.

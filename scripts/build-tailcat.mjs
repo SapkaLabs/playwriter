@@ -91,6 +91,23 @@ async function main() {
   const tags = (await readFile(join(source, 'build-tags.txt'), 'utf8')).trim()
   const native = process.platform === 'win32' ? 'tailcat.exe' : 'tailcat'
   await run(go, ['build', '-tags', tags, '-o', join(out, native), './cmd/tailcat'], source, env)
+  // Compile our small entry point outside the untouched upstream checkout, using
+  // exactly its dependency graph and sums. The local replace selects the checked pin.
+  const launcher = join(cache, 'launcher')
+  await mkdir(launcher, { recursive: true })
+  const launcherSource = await readFile(new URL('./tailcat-launcher/main.go', import.meta.url))
+  const upstreamMod = await readFile(join(source, 'go.mod'), 'utf8')
+  await writeFile(join(launcher, 'main.go'), launcherSource)
+  await writeFile(
+    join(launcher, 'go.mod'),
+    upstreamMod.replace('module github.com/tailscale/tailcat', 'module playwriter.local/tailcat-launcher') +
+      '\nrequire github.com/tailscale/tailcat v0.0.0\nreplace github.com/tailscale/tailcat => ' +
+      JSON.stringify(source.replaceAll('\\', '/')) +
+      '\n',
+  )
+  await cp(join(source, 'go.sum'), join(launcher, 'go.sum'))
+  const launcherName = process.platform === 'win32' ? 'tailcat-launcher.exe' : 'tailcat-launcher'
+  await run(go, ['build', '-mod=readonly', '-tags', tags, '-o', join(out, launcherName), '.'], launcher, env)
   await mkdir(join(out, 'notices'), { recursive: true })
   await cp(join(source, 'LICENSE'), join(out, 'notices', 'tailcat-LICENSE'))
   const goroot = await run(go, ['env', 'GOROOT'], source, env)
@@ -117,6 +134,7 @@ async function main() {
         architecture: process.arch,
         nativeTags: tags,
         wasmBuilder: 'go run ./cmd/tailcat-webdist',
+        launcher: { source: 'scripts/tailcat-launcher/main.go', sha256: sha256(launcherSource) },
         goflags: env.GOFLAGS,
         publicMap: 'https://tailcat.dev/derpmap.json',
         dependencies,

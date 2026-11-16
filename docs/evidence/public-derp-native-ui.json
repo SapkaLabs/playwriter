@@ -1,0 +1,173 @@
+{
+  "sourceCommit": "938e19f85fac95c0545bd60a0847765beb0672af",
+  "extensionVersion": "0.0.179",
+  "input": "@oai/sky native Windows input; no Start/Stop helper",
+  "rows": [
+    {
+      "row": "startup-before-descriptor",
+      "result": "passed",
+      "observation": "Native Start and Stop; barrier blocked=1; release remains stopped",
+      "at": "2026-11-16T18:21:00.949Z"
+    },
+    {
+      "row": "startup-after-descriptor",
+      "result": "passed",
+      "observation": "Native Start and Stop at real descriptor barrier; release remains stopped",
+      "at": "2026-11-16T18:21:32.996Z"
+    },
+    {
+      "row": "copy",
+      "result": "passed",
+      "observation": "Native Copy button; clipboard exactly matched private descriptor without exporting it",
+      "at": "2026-11-16T18:22:19.199Z"
+    },
+    {
+      "row": "connected-and-short-cli-exited",
+      "result": "passed",
+      "observation": "Native Stop after bound title read exited; local status stopped; old session read failed",
+      "at": "2026-11-16T18:23:08.720Z"
+    },
+    {
+      "row": "old-descriptor-before-fresh",
+      "result": "passed",
+      "observation": "Network healthy; native-issued revoked descriptor rejected before a fresh share",
+      "at": "2026-11-16T18:23:10.731Z"
+    },
+    {
+      "row": "old-descriptor-after-fresh",
+      "result": "passed",
+      "observation": "Fresh native share bound read passed; controller released; old descriptor still rejected with network restored",
+      "at": "2026-11-16T18:24:38.311Z"
+    },
+    {
+      "row": "controller-disconnect",
+      "result": "passed",
+      "observation": "Native Stop remains available after released fresh positive controller; local stopped",
+      "at": "2026-11-16T18:24:49.474Z"
+    },
+    {
+      "row": "offline",
+      "result": "passed",
+      "observation": "Established DERP sockets cut; B and fixture HTTP stayed 200; native Stop revoked locally",
+      "at": "2026-11-16T18:26:03.115Z"
+    },
+    {
+      "row": "relay-failure",
+      "result": "passed",
+      "observation": "Healthy bound read; validated owned relay terminated; native Stop revoked locally",
+      "at": "2026-11-16T18:26:59.709Z"
+    },
+    {
+      "row": "adapter-failure",
+      "result": "passed",
+      "observation": "Healthy bound read; validated owned adapter terminated; native Stop revoked locally",
+      "at": "2026-11-16T18:27:35.095Z"
+    },
+    {
+      "row": "native-child-failure",
+      "result": "passed",
+      "observation": "Healthy bound read; validated owned launcher terminated; native Stop revoked locally",
+      "at": "2026-11-16T18:28:07.380Z"
+    },
+    {
+      "row": "hung-peer",
+      "result": "passed",
+      "observation": "Real Runtime.evaluate held at dispatch; native Stop returned stopped without peer acknowledgement; stale continuation released after revocation",
+      "at": "2026-11-16T18:28:53.070Z"
+    },
+    {
+      "row": "offline-without-fixture-toolbar",
+      "result": "passed",
+      "observation": "Bound positive read; actual tc303a DERP socket close observed; fixture tab closed and B healthy; native Stop revoked locally",
+      "at": "2026-11-16T18:29:46.248Z"
+    }
+  ],
+  "browser": "157.0.4341.46",
+  "platform": "Windows 11 Pro 10.0.26300, win32-x64",
+  "node": "v24.12.0",
+  "harness": {
+    "pid": 79000,
+    "profile": "playwriter-derp-ui-hT9np7",
+    "startedAt": "2026-11-16T18:19:59.993Z",
+    "B": 19987
+  },
+  "ordinaryUpgradesRejected": 165,
+  "derpSocketEvents": [
+    {
+      "stage": "derp-construct",
+      "socketId": 1,
+      "endpoint": "wss://tc303a.ipn.dev",
+      "at": 1794853759764
+    },
+    {
+      "stage": "derp-open",
+      "socketId": 1,
+      "endpoint": "wss://tc303a.ipn.dev",
+      "at": 1794853760160
+    },
+    {
+      "stage": "derp-close",
+      "socketId": 1,
+      "endpoint": "wss://tc303a.ipn.dev",
+      "at": 1794853780196
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc303a.ipn.dev",
+      "at": 1794853780213
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc303a.ipn.dev",
+      "at": 1794853780248
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc303a.ipn.dev",
+      "at": 1794853780277
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc303a.ipn.dev",
+      "at": 1794853780335
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc303a.ipn.dev",
+      "at": 1794853780478
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc303a.ipn.dev",
+      "at": 1794853780489
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "main.wasm",
+      "bytes": 26957261,
+      "sha256": "48256fa92fa4e6c9b378c2516857235896a364d9bead97f164c442fa0c86f947"
+    },
+    {
+      "path": "tailcat-launcher.exe",
+      "bytes": 23157248,
+      "sha256": "541fe41e61dd388ac9af0706e211907db697ca2bc1f5d69647a515cd7f985851"
+    },
+    {
+      "path": "tailcat.exe",
+      "bytes": 27289088,
+      "sha256": "ec6ca90b61496206faec0c096ddd58b5a39a0c74f54cdf991c05a90b6d906c6e"
+    },
+    {
+      "path": "wasm_exec.js",
+      "bytes": 16992,
+      "sha256": "0c949f4996f9a89698e4b5c586de32249c3b69b7baadb64d220073cc04acba14"
+    },
+    {
+      "path": "extension/dist-tailcat/background.js",
+      "sha256": "f97840e8cb86ab671b9b99e470b0de2f8e833cba3085d0afcf7e9695ba935de2"
+    }
+  ],
+  "nativeCapture": "tmp/evidence/native-stopped.jpg (local inspected capture)",
+  "result": "passed"
+}

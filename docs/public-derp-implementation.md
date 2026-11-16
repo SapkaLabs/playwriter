@@ -150,6 +150,23 @@ rerun is required; prior green runs do not supersede this later failed attempt.
 The owner also confirmed the interactive desktop is ready for a native UI retry.
 All implementation issues stay open pending the refreshed acceptance evidence.
 
+The refreshed ordinary suite passes: **411 passed, 21 gated tests skipped**,
+35 files passed and eight skipped (391.28 s serially), with no unhandled errors.
+Native Windows Start/Copy/Stop now passes the full startup/connected/offline/
+controller-loss/hung-peer/absent-toolbar matrix. Copy exactly matched the private
+descriptor; the old descriptor failed before and after a released fresh positive
+control. [Sanitized native UI evidence](evidence/public-derp-native-ui.json)
+records the actual input method, source, profile identity, asset hashes and real
+DERP close/denied-retry observations. No Start/Stop helper was used.
+
+The launcher-bearing operation/route test passes (125.44 s), including distinct
+B/R/A/F endpoints, rejected ordinary upgrades, public native sockets, correlated
+frames, established-socket cut with healthy loopback and manual recovery without
+replay. [Sanitized route evidence](evidence/public-derp-route.json) and the
+[188,034-byte displayed fixture screenshot](evidence/public-derp-fixture.png)
+are tied to code checkpoint `938e19f` / extension 0.0.179. Final developer bundle
+acceptance and refreshed ten-minute measurements remain pending.
+
 Never record descriptors, PSKs, private-key JSON, capability URLs or browser
 payloads in this file or exported diagnostics. Record pass/fail/unrun separately
 from source observations. Keep each issue open until its acceptance is proven.

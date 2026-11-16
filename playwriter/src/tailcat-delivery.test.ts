@@ -15,6 +15,41 @@ it.runIf(tailcatTestsEnabled && process.env.PLAYWRITER_TAILCAT_DELIVERY === '1')
     await cp(join(bundle, 'controller'), relocated, { recursive: true })
     const test = await setupTailcatTest({ extensionDirectory: join(bundle, 'extension') })
     let child: ReturnType<typeof spawn> | undefined
+    let controllerStderr = ''
+    const operationTimings: Array<{ operation: number; ms: number; completed: boolean }> = []
+    const report = async (result: 'passed' | 'failed') => {
+      const fixture = test.context.pages().find((page) => page.url().startsWith(new URL(test.fixture.url).origin + '/'))
+      const observedFixture = await fixture
+        ?.evaluate(() => ({
+          scrollY: window.scrollY,
+          history: (window as any).fixtureHistory?.slice(-20),
+        }))
+        .catch(() => undefined)
+      await mkdir(join(root, 'tmp/evidence'), { recursive: true })
+      await writeFile(
+        join(root, 'tmp/evidence/delivery-operations.json'),
+        JSON.stringify(
+          {
+            result,
+            at: new Date().toISOString(),
+            artifactSource: JSON.parse(await readFile(join(bundle, 'delivery.json'), 'utf8')).sourceCommit,
+            operationTimings,
+            // Keep only bounded, generic controller stages, never command bodies.
+            controllerFailures: controllerStderr
+              .split(/\r?\n/)
+              .filter((line) =>
+                /^(Native|Fixture|Owned|Relay|Truncated|Pending|Invalid|Protocol|Connection|Preface|Controller|Tailcat)[\w ():;,.!?/-]{0,500}$/.test(
+                  line,
+                ),
+              ),
+            observedFixture,
+            observationPath: 'owned setup pipe, diagnostics only; not operation-route evidence',
+          },
+          null,
+          2,
+        ) + '\n',
+      )
+    }
     const env = {
       ...process.env,
       PLAYWRITER_TELEMETRY: '0',
@@ -30,6 +65,9 @@ it.runIf(tailcatTestsEnabled && process.env.PLAYWRITER_TAILCAT_DELIVERY === '1')
         [join(relocated, 'tailcat-bin.js'), 'connect', '--descriptor', descriptorPath, '--listen', '127.0.0.1:0'],
         { cwd: relocated, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] },
       )
+      child.stderr!.on('data', (data: Buffer) => {
+        controllerStderr = (controllerStderr + data.toString()).slice(-8192)
+      })
       let stdout = ''
       const ready = await new Promise<{ host: string; session: string; connection: string; command: string }>(
         (ok, reject) => {
@@ -63,12 +101,21 @@ it.runIf(tailcatTestsEnabled && process.env.PLAYWRITER_TAILCAT_DELIVERY === '1')
       )
       expect(ready.command).toContain('--timeout 30000')
       const run = promisify(execFile)
-      const execute = (code: string) =>
-        run(
-          process.execPath,
-          [join(relocated, 'bin.js'), '--host', ready.host, '-s', ready.session, '--timeout', '30000', '-e', code],
-          { cwd: relocated, env, windowsHide: true, timeout: 40_000, maxBuffer: 8192 },
-        )
+      const execute = async (code: string) => {
+        const started = performance.now()
+        let completed = false
+        try {
+          const result = await run(
+            process.execPath,
+            [join(relocated, 'bin.js'), '--host', ready.host, '-s', ready.session, '--timeout', '30000', '-e', code],
+            { cwd: relocated, env, windowsHide: true, timeout: 40_000, maxBuffer: 8192 },
+          )
+          completed = true
+          return result
+        } finally {
+          operationTimings.push({ operation: operationTimings.length + 1, ms: performance.now() - started, completed })
+        }
+      }
       const initial = await execute(
         `state.page=context.pages().find(p=>p.url()===${JSON.stringify(test.fixture.url)}); console.log(await state.page.title())`,
       )
@@ -140,6 +187,10 @@ it.runIf(tailcatTestsEnabled && process.env.PLAYWRITER_TAILCAT_DELIVERY === '1')
         .toBe(true)
       await test.stop()
       expect(await test.control.getByRole('status').textContent()).toBe('stopped')
+      await report('passed')
+    } catch (error) {
+      await report('failed')
+      throw error
     } finally {
       child?.kill()
       await test.cleanup()

@@ -1,5 +1,5 @@
 import { it, expect } from 'vitest'
-import { setupTailcatTest, tailcatTestsEnabled } from './tailcat-test-utils.js'
+import { setupTailcatTest, tailcatTestsEnabled } from './test-utils.js'
 
 // Test-only mutation of the pinned upstream short-address CBOR shape. Never
 // print the bytes: even a negative address carries the share's bearer secret.

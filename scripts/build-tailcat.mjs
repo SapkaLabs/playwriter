@@ -95,7 +95,7 @@ async function main() {
   // exactly its dependency graph and sums. The local replace selects the checked pin.
   const launcher = join(cache, 'launcher')
   await mkdir(launcher, { recursive: true })
-  const launcherSource = await readFile(new URL('./tailcat-launcher/main.go', import.meta.url))
+  const launcherSource = await readFile(new URL('../playwriter/src/tailcat-tunnel/launcher/main.go', import.meta.url))
   const upstreamMod = await readFile(join(source, 'go.mod'), 'utf8')
   await writeFile(join(launcher, 'main.go'), launcherSource)
   await writeFile(
@@ -134,7 +134,7 @@ async function main() {
         architecture: process.arch,
         nativeTags: tags,
         wasmBuilder: 'go run ./cmd/tailcat-webdist',
-        launcher: { source: 'scripts/tailcat-launcher/main.go', sha256: sha256(launcherSource) },
+        launcher: { source: 'playwriter/src/tailcat-tunnel/launcher/main.go', sha256: sha256(launcherSource) },
         goflags: env.GOFLAGS,
         publicMap: 'https://tailcat.dev/derpmap.json',
         dependencies,

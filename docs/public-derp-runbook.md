@@ -93,8 +93,8 @@ Fault tests use `extension/dist-tailcat`, an extension build with
 
 ```powershell
 $env:PLAYWRITER_TAILCAT_TESTS = '1'
-pnpm --filter playwriter exec vitest run src/tailcat-edge.test.ts
-pnpm --filter playwriter exec vitest run src/tailcat-lifecycle.test.ts
+pnpm --filter playwriter exec vitest run src/tailcat-tunnel/edge.test.ts
+pnpm --filter playwriter exec vitest run src/tailcat-tunnel/lifecycle.test.ts
 ```
 
 The silent-established-peer case retains the original defect reproduction and
@@ -109,10 +109,15 @@ relocated directory against its packaged extension:
 ```powershell
 $env:PLAYWRITER_TAILCAT_TESTS = '1'
 $env:PLAYWRITER_TAILCAT_DELIVERY = '1'
-pnpm --filter playwriter exec vitest run src/tailcat-delivery.test.ts
+pnpm --filter playwriter exec vitest run src/tailcat-tunnel/delivery.test.ts
 ```
 
 ## Transport maintenance
+
+Transport code is grouped in `extension/src/tailcat-tunnel/` and
+`playwriter/src/tailcat-tunnel/`, including the shared protocol, CLI subprocesses,
+native launcher and transport tests. The extension's `src/tailcat-share.html`
+and package `tailcat-bin.js` remain the stable public entrypoints.
 
 The unchanged upstream `tailcatListen({derpMapURL,onConnection})` promise returns
 `addr`, private-key JSON and `close()`. Only `addr` crosses the Playwriter worker

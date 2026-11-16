@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { WebSocket, WebSocketServer } from 'ws'
-import { FramedStream, PendingDataBudget, MAX_CHUNK, PUBLIC_DERP_MAP, type FrameMetadata } from './tailcat-protocol.js'
+import { FramedStream, PendingDataBudget, MAX_CHUNK, PUBLIC_DERP_MAP, type FrameMetadata } from './protocol.js'
 
 const exec = promisify(execFile)
 export type Descriptor = {
@@ -150,7 +150,7 @@ export async function connectTailcat(options: {
     dirname(options.nativePath),
     process.platform === 'win32' ? 'tailcat-launcher.exe' : 'tailcat-launcher',
   )
-  const native = ownedChild('./tailcat-native', [launcherPath, descriptor.addr], env)
+  const native = ownedChild('./native', [launcherPath, descriptor.addr], env)
   native.on('message', (message: any) => {
     if (message.nativePid) nativePid = message.nativePid
     if (!terminal && message.stage === 'stream-established') {
@@ -329,7 +329,7 @@ export async function connectTailcat(options: {
     const wsURL = `ws://127.0.0.1:${adapterPort}${path}`
     const relayPort = await freePort()
     host = `http://127.0.0.1:${relayPort}`
-    relay = ownedChild('./tailcat-relay', [String(relayPort), options.stateDirectory], env)
+    relay = ownedChild('./relay', [String(relayPort), options.stateDirectory], env)
     relay.on('message', (message: any) => {
       if (message.executeFailed) fail('Fixture operation failed; outcome unknown')
     })

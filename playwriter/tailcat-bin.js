@@ -1,2 +1,2 @@
 #!/usr/bin/env node
-import './dist/tailcat-cli.js'
+import './dist/tailcat-tunnel/cli.js'

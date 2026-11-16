@@ -30,13 +30,13 @@ import {
 } from 'playwriter/src/protocol'
 import { handleGhostBrowserCommand, type GhostBrowserCommandParams } from 'playwriter/src/ghost-browser'
 import { RemoteTunnel } from './remote-tunnel'
-import { TailcatTunnel } from './tailcat-tunnel'
+import { TailcatTunnel } from './tailcat-tunnel/index'
 import {
   armTailcatBarrier,
   waitTailcatBarrier,
   releaseTailcatBarrier,
   tailcatBarrierStatus,
-} from './tailcat-test-controls'
+} from './tailcat-tunnel/test-controls'
 import {
   canReattach,
   endTabSession,

@@ -6,8 +6,8 @@ import { join, resolve } from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { expect } from 'vitest'
-import { startTailcatFixture } from './tailcat-fixture.js'
-import { connectTailcat } from './tailcat-controller.js'
+import { startTailcatFixture } from './fixture.js'
+import { connectTailcat } from './controller.js'
 
 export const tailcatTestsEnabled = process.env.PLAYWRITER_TAILCAT_TESTS === '1'
 export async function setupTailcatTest(options: { extensionDirectory?: string } = {}) {

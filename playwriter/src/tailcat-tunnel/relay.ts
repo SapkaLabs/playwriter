@@ -1,5 +1,5 @@
 // Dedicated relay process; it never consumes personal daemon/cloud state.
-import { startPlayWriterCDPRelayServer } from './cdp-relay.js'
+import { startPlayWriterCDPRelayServer } from '../cdp-relay.js'
 import { join } from 'node:path'
 const relay = await startPlayWriterCDPRelayServer({
   host: '127.0.0.1',

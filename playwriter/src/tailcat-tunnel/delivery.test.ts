@@ -4,7 +4,7 @@ import { promisify } from 'node:util'
 import { cp, mkdtemp, rm, writeFile, mkdir, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { setupTailcatTest, tailcatTestsEnabled } from './tailcat-test-utils.js'
+import { setupTailcatTest, tailcatTestsEnabled } from './test-utils.js'
 
 it.runIf(tailcatTestsEnabled && process.env.PLAYWRITER_TAILCAT_DELIVERY === '1')(
   'runs a relocated production developer bundle through public DERP and disconnects it',

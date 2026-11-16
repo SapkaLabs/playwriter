@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { FramedStream, PendingDataBudget } from './tailcat-protocol.js'
+import { FramedStream, PendingDataBudget } from './protocol.js'
 
 describe('public Tailcat framed byte stream', () => {
   it('reports malformed JSON without copying its bytes into diagnostics', async () => {

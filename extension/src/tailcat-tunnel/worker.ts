@@ -1,5 +1,5 @@
 // The only browser transport owner. Terminating this dedicated worker destroys keys and netstack.
-import { PUBLIC_DERP_MAP, MAX_CHUNK } from 'playwriter/src/tailcat-protocol'
+import { PUBLIC_DERP_MAP, MAX_CHUNK } from 'playwriter/src/tailcat-tunnel/protocol'
 
 type Conn = { port: number; read(): Promise<Uint8Array | null>; write(bytes: Uint8Array): Promise<void>; close(): void }
 declare const self: {

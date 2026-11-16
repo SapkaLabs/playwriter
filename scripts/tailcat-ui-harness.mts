@@ -4,7 +4,7 @@ import { createServer } from 'node:http'
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { startTailcatFixture } from '../playwriter/src/tailcat-fixture.js'
+import { startTailcatFixture } from '../playwriter/src/tailcat-tunnel/fixture.js'
 
 const root = resolve('.')
 const run = resolve('tmp/ui-acceptance')

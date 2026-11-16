@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { setupTailcatTest, tailcatTestsEnabled } from './tailcat-test-utils.js'
+import { setupTailcatTest, tailcatTestsEnabled } from './test-utils.js'
 
 describe.runIf(tailcatTestsEnabled)('public DERP lifecycle and no replay', () => {
   it('rejects a stale dispatch continuation after Stop without a click effect', async () => {

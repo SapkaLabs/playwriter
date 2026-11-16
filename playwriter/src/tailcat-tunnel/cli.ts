@@ -6,7 +6,7 @@ import { promisify, parseArgs } from 'node:util'
 import { homedir, userInfo } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { connectTailcat } from './tailcat-controller.js'
+import { connectTailcat } from './controller.js'
 
 const registry =
   process.env.PLAYWRITER_TAILCAT_REGISTRY ||
@@ -83,7 +83,7 @@ async function main(): Promise<void> {
     nativePath:
       values.native ||
       fileURLToPath(
-        new URL('../tailcat/' + (process.platform === 'win32' ? 'tailcat.exe' : 'tailcat'), import.meta.url),
+        new URL('../../tailcat/' + (process.platform === 'win32' ? 'tailcat.exe' : 'tailcat'), import.meta.url),
       ),
     listen: values.listen,
     stateDirectory: run,

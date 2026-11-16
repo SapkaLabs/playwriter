@@ -8,11 +8,11 @@ import { spawn } from 'node:child_process'
 import { execFile, execFileSync } from 'node:child_process'
 import { WebSocket } from 'ws'
 import { promisify } from 'node:util'
-import { connectTailcat } from './tailcat-controller.js'
+import { connectTailcat } from './controller.js'
 import { writeFile, readFile } from 'node:fs/promises'
 import { mkdir } from 'node:fs/promises'
-import { startTailcatFixture } from './tailcat-fixture.js'
-import { FramedStream, PUBLIC_DERP_MAP, MAX_CHUNK } from './tailcat-protocol.js'
+import { startTailcatFixture } from './fixture.js'
+import { FramedStream, PUBLIC_DERP_MAP, MAX_CHUNK } from './protocol.js'
 
 // Approved seams 1, 4 and 6. This is a public-DERP runtime gate, not the final matrix.
 it.runIf(process.env.PLAYWRITER_TAILCAT_TESTS === '1')(
@@ -127,7 +127,7 @@ it.runIf(process.env.PLAYWRITER_TAILCAT_TESTS === '1')(
         [
           '--import',
           'tsx',
-          'src/tailcat-cli.ts',
+          'src/tailcat-tunnel/cli.ts',
           'connect',
           '--descriptor',
           descriptorFile,
@@ -167,7 +167,7 @@ it.runIf(process.env.PLAYWRITER_TAILCAT_TESTS === '1')(
         expect(read.stdout).toContain('DERP fixture')
         const disconnected = await promisify(execFile)(
           process.execPath,
-          ['--import', 'tsx', 'src/tailcat-cli.ts', 'disconnect', '--connection', ready.connection],
+          ['--import', 'tsx', 'src/tailcat-tunnel/cli.ts', 'disconnect', '--connection', ready.connection],
           { timeout: 10_000, env: { ...process.env, PLAYWRITER_TAILCAT_REGISTRY: join(profile, 'connections') } },
         )
         expect(disconnected.stdout).toContain('browser sharing remains active')

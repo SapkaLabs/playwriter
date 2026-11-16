@@ -1,5 +1,5 @@
 import { it, expect } from 'vitest'
-import { setupTailcatTest, tailcatTestsEnabled } from './tailcat-test-utils.js'
+import { setupTailcatTest, tailcatTestsEnabled } from './test-utils.js'
 
 it.runIf(tailcatTestsEnabled)(
   'does not log a remote-controlled URL in the extension console',

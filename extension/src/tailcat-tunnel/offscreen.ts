@@ -1,4 +1,4 @@
-import { MAX_CHUNK } from 'playwriter/src/tailcat-protocol'
+import { MAX_CHUNK } from 'playwriter/src/tailcat-tunnel/protocol'
 
 // Exactly one worker per background-owned port. Port loss is revocation, never restoration.
 let owner: chrome.runtime.Port | null = null
@@ -9,7 +9,7 @@ chrome.runtime.onConnect.addListener((port) => {
     return
   }
   owner = port
-  const worker = new Worker(new URL('./tailcat-worker.ts', import.meta.url))
+  const worker = new Worker(new URL('./worker.ts', import.meta.url))
   const dispose = () => {
     worker.terminate()
     if (owner === port) owner = null

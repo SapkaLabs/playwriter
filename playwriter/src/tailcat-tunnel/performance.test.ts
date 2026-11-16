@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { setupTailcatTest, tailcatTestsEnabled } from './tailcat-test-utils.js'
+import { setupTailcatTest, tailcatTestsEnabled } from './test-utils.js'
 
 // Windows acceptance measurement, not a performance threshold or a production
 // keepalive. The sharing page is closed for the entire ten-minute idle period.

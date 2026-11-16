@@ -4,9 +4,9 @@ import {
   utf8Length,
   PUBLIC_DERP_MAP,
   MAX_CHUNK,
-} from 'playwriter/src/tailcat-protocol'
-import type { RemoteTunnelOptions, TunnelConnectionHandlers } from './remote-tunnel'
-import { waitTailcatBarrier } from './tailcat-test-controls'
+} from 'playwriter/src/tailcat-tunnel/protocol'
+import type { RemoteTunnelOptions, TunnelConnectionHandlers } from '../remote-tunnel'
+import { waitTailcatBarrier } from './test-controls'
 
 export class TailcatTunnel {
   url = ''

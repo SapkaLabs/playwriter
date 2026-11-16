@@ -1,5 +1,5 @@
 import { it, expect } from 'vitest'
-import { setupTailcatTest, tailcatTestsEnabled } from './tailcat-test-utils.js'
+import { setupTailcatTest, tailcatTestsEnabled } from './test-utils.js'
 
 it.runIf(tailcatTestsEnabled).each(['background', 'extension', 'browser'] as const)(
   'revokes sharing across an actual %s restart without restoring the old descriptor',

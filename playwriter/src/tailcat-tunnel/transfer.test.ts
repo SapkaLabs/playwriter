@@ -1,7 +1,7 @@
 import { it, expect } from 'vitest'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { setupTailcatTest, tailcatTestsEnabled } from './tailcat-test-utils.js'
+import { setupTailcatTest, tailcatTestsEnabled } from './test-utils.js'
 
 it.runIf(tailcatTestsEnabled)(
   'transfers bounded synthetic responses over the real public byte stream',

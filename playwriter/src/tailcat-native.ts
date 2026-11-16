@@ -9,6 +9,10 @@ const child = spawn(
   },
 )
 process.stdin.pipe(child.stdin)
+if (process.env.PLAYWRITER_TAILCAT_TESTS === '1')
+  child.stdout.on('data', (bytes: Buffer) => {
+    if (process.connected) process.send?.({ pipeReadBytes: bytes.length }, () => {})
+  })
 child.stdout.pipe(process.stdout)
 child.on('spawn', () => process.send?.({ nativePid: child.pid }))
 child.on('error', () => {

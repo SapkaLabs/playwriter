@@ -75,7 +75,12 @@ const METHODS = new Set([
 ])
 
 function validate(json: string): void {
-  const message = JSON.parse(json)
+  let message: any
+  try {
+    message = JSON.parse(json)
+  } catch {
+    throw new Error('Invalid extension JSON')
+  }
   const object = (value: unknown) => Boolean(value && typeof value === 'object' && !Array.isArray(value))
   const strings = (value: Record<string, unknown>, keys: string[]) => {
     if (keys.some((key) => value[key] !== undefined && typeof value[key] !== 'string'))

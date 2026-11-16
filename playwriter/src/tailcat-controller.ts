@@ -142,6 +142,10 @@ export async function connectTailcat(options: {
   const native = ownedChild('./tailcat-native', [options.nativePath, descriptor.addr], env)
   native.on('message', (message: any) => {
     if (message.nativePid) nativePid = message.nativePid
+    if (process.env.PLAYWRITER_TAILCAT_TESTS === '1' && Number.isSafeInteger(message.pipeReadBytes)) {
+      trace.push({ stage: 'native-child-read', at: Date.now(), bytes: message.pipeReadBytes })
+      if (trace.length > 512) trace.shift()
+    }
   })
   const startup = setTimeout(() => fail('Native startup timed out (60 s)'), 60_000)
   const stream = new FramedStream({
@@ -248,11 +252,21 @@ export async function connectTailcat(options: {
   native.stdout!.on('end', () => stream.end())
   native.stdout!.on('data', (bytes: Buffer) => {
     native.stdout!.pause()
+    if (process.env.PLAYWRITER_TAILCAT_TESTS === '1') {
+      trace.push({ stage: 'native-pipe-read', at: Date.now(), bytes: bytes.length })
+      if (trace.length > 512) trace.shift()
+    }
     void (async () => {
       for (let offset = 0; offset < bytes.length; offset += MAX_CHUNK)
         await stream.receive(bytes.subarray(offset, offset + MAX_CHUNK))
     })()
-      .then(() => native.stdout!.resume())
+      .then(() => {
+        if (process.env.PLAYWRITER_TAILCAT_TESTS === '1') {
+          trace.push({ stage: 'native-pipe-resume', at: Date.now() })
+          if (trace.length > 512) trace.shift()
+        }
+        native.stdout!.resume()
+      })
       .catch(() => fail('Native frame ingress failed'))
   })
   try {

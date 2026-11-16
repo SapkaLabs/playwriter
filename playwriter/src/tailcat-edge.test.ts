@@ -187,6 +187,7 @@ it.runIf(process.env.PLAYWRITER_TAILCAT_TESTS === '1')(
         nativePath,
         stateDirectory: join(profile, 'controller'),
       })
+      const operationTimings: Array<{ operation: number; ms: number; completed: boolean }> = []
       try {
         const command = await promisify(execFile)(
           process.execPath,
@@ -238,32 +239,45 @@ it.runIf(process.env.PLAYWRITER_TAILCAT_TESTS === '1')(
             ),
           ).toBe(true)
         }
-        const execute = (code: string) =>
-          promisify(execFile)(
-            process.execPath,
-            [
-              '--import',
-              'tsx',
-              'src/cli.ts',
-              '--host',
-              controller.host,
-              '-s',
-              controller.sessionId,
-              '--timeout',
-              '30000',
-              '-e',
-              code,
-            ],
-            { timeout: 40_000, maxBuffer: 16 * 1024, env: { ...process.env, PLAYWRITER_TELEMETRY: '0' } },
-          )
+        const execute = async (code: string) => {
+          const started = performance.now()
+          let completed = false
+          try {
+            const result = await promisify(execFile)(
+              process.execPath,
+              [
+                '--import',
+                'tsx',
+                'src/cli.ts',
+                '--host',
+                controller.host,
+                '-s',
+                controller.sessionId,
+                '--timeout',
+                '30000',
+                '-e',
+                code,
+              ],
+              { timeout: 40_000, maxBuffer: 16 * 1024, env: { ...process.env, PLAYWRITER_TELEMETRY: '0' } },
+            )
+            completed = true
+            return result
+          } finally {
+            operationTimings.push({
+              operation: operationTimings.length + 1,
+              ms: performance.now() - started,
+              completed,
+            })
+          }
+        }
         const snapshot = await execute(
           'console.log((await snapshot({page:state.page,showDiffSinceLastCall:false})).slice(0,8192))',
         )
         expect(snapshot.stdout).toContain('Unicode text')
         expect(Buffer.byteLength(snapshot.stdout)).toBeLessThanOrEqual(8192)
-        await execute(
-          'await state.page.getByRole("button",{name:"Click counter",exact:true}).click(); await state.page.getByRole("textbox",{name:"Unicode text"}).fill("Привіт 👋 漢字"); await state.page.getByText("Scroll marker",{exact:true}).scrollIntoViewIfNeeded()',
-        )
+        await execute('await state.page.getByRole("button",{name:"Click counter",exact:true}).click()')
+        await execute('await state.page.getByRole("textbox",{name:"Unicode text"}).fill("Привіт 👋 漢字")')
+        await execute('await state.page.getByText("Scroll marker",{exact:true}).scrollIntoViewIfNeeded()')
         const history = await execute(
           'console.log(JSON.stringify(await state.page.evaluate(() => window.fixtureHistory)))',
         )
@@ -271,9 +285,8 @@ it.runIf(process.env.PLAYWRITER_TAILCAT_TESTS === '1')(
         expect(history.stdout.match(/"type":"click"/g)).toHaveLength(1)
         await mkdir(join(root, 'tmp/evidence'), { recursive: true })
         const screenshot = join(root, 'tmp/evidence/fixture.png')
-        await execute(
-          `await state.page.getByRole("heading",{name:"DERP fixture",exact:true}).scrollIntoViewIfNeeded(); await state.page.screenshot({path:${JSON.stringify(screenshot)},scale:"css"})`,
-        )
+        await execute('await state.page.getByRole("heading",{name:"DERP fixture",exact:true}).scrollIntoViewIfNeeded()')
+        await execute(`await state.page.screenshot({path:${JSON.stringify(screenshot)},scale:"css"})`)
         const consoleOutput = await execute(
           'console.log(JSON.stringify((await getLatestLogs({page:state.page,count:20}))).slice(0,4096))',
         )
@@ -397,6 +410,7 @@ it.runIf(process.env.PLAYWRITER_TAILCAT_TESTS === '1')(
               session: controller.sessionId,
               extensionId: controller.extensionId,
               processIds: { native: controller.nativePid, relay: controller.relayPid, adapter: controller.adapterPid },
+              operationTimings,
               nativeSockets,
               ordinaryUpgradeProbes: 'B=403,R=403',
               allEstablishedSocketsClosed: cut.trackedIds,
@@ -410,6 +424,33 @@ it.runIf(process.env.PLAYWRITER_TAILCAT_TESTS === '1')(
             2,
           ) + '\n',
         )
+      } catch (error) {
+        const failures = controller.failures.map((reason) =>
+          /^(Native|Fixture|Owned|Relay|Truncated|Pending|Invalid|Protocol|Connection|Preface)/.test(reason)
+            ? reason
+            : 'Transport failure',
+        )
+        const browserTrace = await control
+          .evaluate(() => chrome.runtime.sendMessage({ action: 'tailcatTest', command: 'trace' }))
+          .catch(() => [])
+        await mkdir(join(root, 'tmp/evidence'), { recursive: true })
+        await writeFile(
+          join(root, 'tmp/evidence/edge-failure.json'),
+          JSON.stringify(
+            {
+              at: new Date().toISOString(),
+              result: 'failed',
+              terminal: controller.isTerminal(),
+              failures,
+              operationTimings,
+              controllerTrace: controller.trace,
+              browserTrace,
+            },
+            null,
+            2,
+          ) + '\n',
+        )
+        throw error
       } finally {
         await controller.close()
       }

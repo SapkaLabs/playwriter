@@ -2,6 +2,24 @@ import { describe, expect, it } from 'vitest'
 import { FramedStream, PendingDataBudget } from './tailcat-protocol.js'
 
 describe('public Tailcat framed byte stream', () => {
+  it('reports malformed JSON without copying its bytes into diagnostics', async () => {
+    const errors: string[] = []
+    const stream = new FramedStream({
+      write: async () => {},
+      onMessage: async () => {},
+      onError: (error) => errors.push(error.message),
+    })
+    await stream.start()
+    const bytes = new TextEncoder().encode('privateFixture')
+    const wire = new Uint8Array(10 + bytes.length)
+    wire.set([80, 87, 84, 67, 49, 10])
+    new DataView(wire.buffer).setUint32(6, bytes.length)
+    wire.set(bytes, 10)
+    await stream.receive(wire)
+    expect(errors.join(' ')).toContain('JSON')
+    expect(errors.join(' ')).not.toContain('privateFixture')
+    stream.close()
+  })
   it('keeps diagnostic command names bounded independently of the record size', async () => {
     let diagnostic: unknown
     const stream = new FramedStream({

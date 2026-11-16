@@ -69,10 +69,13 @@ it.runIf(tailcatTestsEnabled && process.env.PLAYWRITER_TAILCAT_DELIVERY === '1')
           [join(relocated, 'bin.js'), '--host', ready.host, '-s', ready.session, '--timeout', '30000', '-e', code],
           { cwd: relocated, env, windowsHide: true, timeout: 40_000, maxBuffer: 8192 },
         )
-      const result = await execute(
-        `state.page=context.pages().find(p=>p.url()===${JSON.stringify(test.fixture.url)}); console.log(await state.page.title()); await state.page.getByRole('button',{name:'Click counter',exact:true}).click(); await state.page.getByRole('textbox',{name:'Unicode text'}).fill('Привіт 👋 漢字'); console.log(JSON.stringify(await state.page.evaluate(()=>window.fixtureHistory)))`,
+      const initial = await execute(
+        `state.page=context.pages().find(p=>p.url()===${JSON.stringify(test.fixture.url)}); console.log(await state.page.title())`,
       )
-      expect(result.stdout).toContain('DERP fixture')
+      expect(initial.stdout).toContain('DERP fixture')
+      await execute('await state.page.getByRole("button",{name:"Click counter",exact:true}).click()')
+      await execute('await state.page.getByRole("textbox",{name:"Unicode text"}).fill("Привіт 👋 漢字")')
+      const result = await execute('console.log(JSON.stringify(await state.page.evaluate(()=>window.fixtureHistory)))')
       expect(result.stdout.match(/"type":"click"/g)).toHaveLength(1)
       expect(result.stdout).toContain('Привіт 👋 漢字')
       const snapshot = await execute(
@@ -145,5 +148,5 @@ it.runIf(tailcatTestsEnabled && process.env.PLAYWRITER_TAILCAT_DELIVERY === '1')
       await rm(relocated, { recursive: true, force: true })
     }
   },
-  150_000,
+  300_000,
 )

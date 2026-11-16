@@ -58,6 +58,28 @@ await run(
   ],
   { ...process.env, npm_config_ignore_scripts: 'true' },
 )
+// Deploy's explicit `src` include also picks up ignored screenshots produced by
+// local tests. Ship only repository source files from that tree.
+const sourceFiles = new Set(
+  execFileSync('git', ['ls-files', '-z', '--', 'playwriter/src'], {
+    cwd: root,
+    encoding: 'utf8',
+    windowsHide: true,
+  })
+    .split('\0')
+    .filter(Boolean)
+    .map((path) => path.slice('playwriter/'.length)),
+)
+async function pruneUntrackedSource(directory, prefix = 'src/') {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name)
+    const key = prefix + entry.name
+    if (entry.isSymbolicLink()) throw new Error('Unexpected link in deployed source')
+    if (entry.isDirectory()) await pruneUntrackedSource(path, key + '/')
+    else if (!sourceFiles.has(key)) await rm(path)
+  }
+}
+await pruneUntrackedSource(join(controller, 'src'))
 await cp(join(root, 'dist/tailcat'), join(controller, 'tailcat'), { recursive: true })
 await writeFile(join(controller, 'playwriter.cmd'), '@echo off\r\nnode "%~dp0bin.js" %*\r\n')
 await writeFile(join(controller, 'playwriter-tailcat.cmd'), '@echo off\r\nnode "%~dp0tailcat-bin.js" %*\r\n')

@@ -118,6 +118,20 @@ Recorded before writing tests; the owner preapproved all six:
   restored-route socket 2 opened only after failed-generation disposal. Detailed
   sanitized metadata is saved in `tmp/evidence/edge-acceptance.json`. Repeat after
   the remaining dependency decision changes the final runtime.
+- PASS: production bundle copied outside the checkout; its compiled controller
+  and ordinary CLI connect to the packaged extension through DERP, read the
+  fixture, click exactly once, disconnect, then Stop through the control page
+  (28.84 s). This is DOM interaction; native UI remains unrun.
+- PASS: complete ordinary repository run, 410 passed / 20 gated tests skipped
+  (60.99 s). The recording fixture now waits for observable MP4 initialization
+  and a media fragment before closing, instead of assuming a three-second wait
+  delivered data. Existing decode/duration assertions remain. No production
+  recording change was retained from the failed fallback-read experiment.
+- Checkpoint bundle `c968dd3` / 0.0.178 verifies 14,441 files, including standalone
+  notices, relocation and every ZIP file hash. Current hashes and superseding
+  source revisions are published in issue #6. Optional removal of legacy build
+  experiments was blocked by automatic review; ZIP construction names only the
+  four delivery paths, excluding those directories.
 
 Never record descriptors, PSKs, private-key JSON, capability URLs or browser
 payloads in this file or exported diagnostics. Record pass/fail/unrun separately

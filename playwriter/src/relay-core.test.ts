@@ -19,6 +19,7 @@ import {
   findTestPageJs,
 } from './test-utils.js'
 import './test-declarations.js'
+import type { RelayServerEvents } from './cdp-types.js'
 
 const TEST_PORT = 19987
 const SERVER_URL = `http://127.0.0.1:${TEST_PORT}`
@@ -1989,8 +1990,21 @@ describe('Relay Core Tests', () => {
     await ensureConnectedTabForExecute()
     const dir = path.join(process.cwd(), 'tmp', 'recording-endings')
     fs.rmSync(dir, { recursive: true, force: true })
+    let starts=0,stream:string|undefined
+    let tail=Buffer.alloc(0),sawMoov=false,sawMoof=false
+    const observe:RelayServerEvents['cdp:response']=({command,response})=>{
+      const result=response.result as {stream?:string;data?:string;base64Encoded?:boolean}|undefined
+      if(command.method==='Page.startScreenRecording' && ++starts===2) stream=result?.stream
+      if(command.method==='IO.read' && stream && command.params?.handle===stream && result?.data) {
+        const bytes=Buffer.concat([tail,Buffer.from(result.data,result.base64Encoded?'base64':'utf8')])
+        sawMoov ||= bytes.includes(Buffer.from('moov'))
+        sawMoof ||= bytes.includes(Buffer.from('moof'))
+        tail=Buffer.from(bytes.subarray(Math.max(0,bytes.length-3)))
+      }
+    }
+    testCtx!.relayServer.on('cdp:response',observe)
     try {
-      const result = await client.callTool({
+      const setup = await client.callTool({
         name: 'execute',
         arguments: {
           code: js`
@@ -2002,7 +2016,23 @@ describe('Relay Core Tests', () => {
             state.endB = await context.newPage()
             await state.endB.setContent(spin)
             const closed = await recording.start({ page: state.endB, outputPath: 'tmp/recording-endings/closed.mp4', codec: 'av1' })
-            await new Promise((r) => setTimeout(r, 3000))
+            state.recordingEndings = {auto,closed,duplicate}
+          `,
+        },
+      })
+      expect(setup.isError).toBeFalsy()
+      // Native fragment delivery varies by browser/platform. Closing before an
+      // initialization segment and media fragment arrive cannot test retention.
+      await Promise.all([
+        new Promise(ok=>setTimeout(ok,3000)),
+        expect.poll(()=>sawMoov && sawMoof,{timeout:15_000}).toBe(true),
+      ])
+      const result = await client.callTool({
+        name:'execute',
+        arguments:{
+          code:js`
+            const {auto,closed,duplicate}=state.recordingEndings
+            delete state.recordingEndings
             const endB = state.endB
             delete state.endB
             await endB.close()
@@ -2045,6 +2075,7 @@ describe('Relay Core Tests', () => {
         expect(Number(probe.stdout.toString())).toBeGreaterThan(1.5)
       }
     } finally {
+      testCtx!.relayServer.off('cdp:response',observe)
       fs.rmSync(dir, { recursive: true, force: true })
     }
   }, 60000)

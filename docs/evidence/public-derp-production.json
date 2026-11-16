@@ -1,0 +1,126 @@
+{
+  "result": "passed",
+  "at": "2026-11-16T18:59:28.643Z",
+  "artifactSource": "e8bcc731fc66d102f9e20bab9076fbfe45523f47",
+  "operationTimings": [
+    {
+      "operation": 1,
+      "ms": 3600.532500000001,
+      "completed": true
+    },
+    {
+      "operation": 2,
+      "ms": 6808.2516,
+      "completed": true
+    },
+    {
+      "operation": 3,
+      "ms": 1622.827599999997,
+      "completed": true
+    },
+    {
+      "operation": 4,
+      "ms": 929.3529999999955,
+      "completed": true
+    },
+    {
+      "operation": 5,
+      "ms": 2811.179900000003,
+      "completed": true
+    },
+    {
+      "operation": 6,
+      "ms": 5605.106399999997,
+      "completed": true
+    },
+    {
+      "operation": 7,
+      "ms": 4342.699500000002,
+      "completed": true
+    },
+    {
+      "operation": 8,
+      "ms": 225.3891999999978,
+      "completed": true
+    },
+    {
+      "operation": 9,
+      "ms": 4974.581900000005,
+      "completed": true
+    },
+    {
+      "operation": 10,
+      "ms": 5640.345500000003,
+      "completed": true
+    },
+    {
+      "operation": 11,
+      "ms": 5330.492299999998,
+      "completed": true
+    },
+    {
+      "operation": 12,
+      "ms": 5671.166000000012,
+      "completed": true
+    }
+  ],
+  "controllerFailures": [
+    "Controller disconnected with dispatched commands; outcome unknown. Re-observe before retrying."
+  ],
+  "observedFixture": {
+    "scrollY": 0,
+    "history": [
+      {
+        "type": "click",
+        "value": "1"
+      },
+      {
+        "type": "input",
+        "value": "Привіт 👋 漢字"
+      }
+    ]
+  },
+  "observationPath": "owned setup pipe, diagnostics only; not operation-route evidence",
+  "nativeUI": {
+    "result": "passed",
+    "input": "@oai/sky native Windows input",
+    "start": true,
+    "compiledBoundTitleRead": true,
+    "privateClipboardMatch": true,
+    "stop": true,
+    "revokedBoundReadRejected": true,
+    "remainingOwnedControllerProcesses": 0,
+    "profile": "playwriter-derp-ui-vcdVt4",
+    "harnessPid": 84040,
+    "browser": "157.0.4341.46",
+    "endpoints": {
+      "B": 19987,
+      "R": 63545,
+      "A": 63544,
+      "F": 64128
+    },
+    "processIds": {
+      "native": 73140,
+      "relay": 27216,
+      "adapter": 86284
+    },
+    "session": "1",
+    "extensionId": "remote:6d364ff9f2e6cf9d2a24cd549ae3633f0aa7980a2218407f5282729ff98ca599",
+    "ordinaryUpgradesRejected": 47,
+    "testing": false
+  },
+  "screenshot": {
+    "path": "docs/evidence/public-derp-production.png",
+    "bytes": 188199,
+    "sha256": "1cd609b0539d806164a410126303d20e732662cc9610372e92ddacacfc987a7f"
+  },
+  "earlierFailedAttempt": {
+    "artifactSource": "3495f029260534e872adeee9b193f33eea113290",
+    "durationMs": 118108,
+    "stage": "scroll after viewport capture",
+    "outcome": "unknown",
+    "cause": "unproven",
+    "retainedZip": "dist/public-derp-dev-win32-x64-3495f02.zip",
+    "note": "Fresh fixture/run passed with unchanged operation scripts and deadlines; no runtime fix is claimed."
+  }
+}

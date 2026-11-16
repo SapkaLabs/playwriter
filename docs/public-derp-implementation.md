@@ -1,5 +1,9 @@
 # Public DERP PoC implementation checkpoint
 
+Current handoff: [final same-machine acceptance](public-derp-acceptance.md).
+The chronological checkpoints below retain earlier failures and pending states;
+the final handoff supersedes their current-status conclusions.
+
 Contract: [SapkaLabs/playwriter#1](https://github.com/SapkaLabs/playwriter/issues/1).
 Implementation branch: `feat/public-derp-poc`.
 Fixed review baseline: `597c0f5bddeb9580a9745787bf4f8636e5e155be`.

@@ -1,10 +1,10 @@
 # Windows Edge public DERP developer PoC
 
-Status: implementation checkpoint, **acceptance incomplete**. Native browser-owned
-UI validation and final artifact revalidation remain pending. Restart and
-authentication checks passed on the earlier runtime. The owner-approved native
-launcher fixes the silent-peer deadline; see [the checkpoint](public-derp-implementation.md)
-and [the dependency decision](public-derp-preface-blocker.md).
+Status: same-machine developer PoC acceptance demonstrated on artifact source
+`e8bcc731fc66d102f9e20bab9076fbfe45523f47`, extension 0.0.179. Read
+[the final results and retained failure](public-derp-acceptance.md) and
+[the approved native launcher decision](public-derp-preface-blocker.md).
+This is a developer bundle, not a store or public package release.
 
 ## Build
 

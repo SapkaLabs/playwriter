@@ -1,0 +1,124 @@
+{
+  "at": "2026-11-16T18:43:36.739Z",
+  "browser": "157.0.4341.46",
+  "platform": "win32",
+  "node": "v24.12.0",
+  "idleControlPage": "closed",
+  "samples": [
+    {
+      "minute": 1,
+      "at": "2026-11-16T18:44:52.249Z",
+      "browserPrivateBytes": 408715264,
+      "browserWorkingSetBytes": 697929728,
+      "controllerPrivateBytes": 227848192,
+      "adapterRSS": 115642368,
+      "terminal": false
+    },
+    {
+      "minute": 2,
+      "at": "2026-11-16T18:45:52.622Z",
+      "browserPrivateBytes": 408702976,
+      "browserWorkingSetBytes": 699736064,
+      "controllerPrivateBytes": 227823616,
+      "adapterRSS": 116088832,
+      "terminal": false
+    },
+    {
+      "minute": 3,
+      "at": "2026-11-16T18:46:52.911Z",
+      "browserPrivateBytes": 406093824,
+      "browserWorkingSetBytes": 701034496,
+      "controllerPrivateBytes": 226885632,
+      "adapterRSS": 116183040,
+      "terminal": false
+    },
+    {
+      "minute": 4,
+      "at": "2026-11-16T18:47:53.193Z",
+      "browserPrivateBytes": 402219008,
+      "browserWorkingSetBytes": 698757120,
+      "controllerPrivateBytes": 226824192,
+      "adapterRSS": 116387840,
+      "terminal": false
+    },
+    {
+      "minute": 5,
+      "at": "2026-11-16T18:48:53.516Z",
+      "browserPrivateBytes": 419643392,
+      "browserWorkingSetBytes": 726196224,
+      "controllerPrivateBytes": 226406400,
+      "adapterRSS": 116912128,
+      "terminal": false
+    },
+    {
+      "minute": 6,
+      "at": "2026-11-16T18:49:53.835Z",
+      "browserPrivateBytes": 412172288,
+      "browserWorkingSetBytes": 722714624,
+      "controllerPrivateBytes": 226406400,
+      "adapterRSS": 117186560,
+      "terminal": false
+    },
+    {
+      "minute": 7,
+      "at": "2026-11-16T18:50:54.134Z",
+      "browserPrivateBytes": 412692480,
+      "browserWorkingSetBytes": 722001920,
+      "controllerPrivateBytes": 226308096,
+      "adapterRSS": 117690368,
+      "terminal": false
+    },
+    {
+      "minute": 8,
+      "at": "2026-11-16T18:51:54.427Z",
+      "browserPrivateBytes": 418693120,
+      "browserWorkingSetBytes": 727896064,
+      "controllerPrivateBytes": 226177024,
+      "adapterRSS": 118161408,
+      "terminal": false
+    },
+    {
+      "minute": 9,
+      "at": "2026-11-16T18:52:54.734Z",
+      "browserPrivateBytes": 413511680,
+      "browserWorkingSetBytes": 724242432,
+      "controllerPrivateBytes": 226234368,
+      "adapterRSS": 118566912,
+      "terminal": false
+    },
+    {
+      "minute": 10,
+      "at": "2026-11-16T18:53:55.048Z",
+      "browserPrivateBytes": 422653952,
+      "browserWorkingSetBytes": 732659712,
+      "controllerPrivateBytes": 226365440,
+      "adapterRSS": 119083008,
+      "terminal": false
+    }
+  ],
+  "beforeShare": {
+    "at": "2026-11-16T18:43:37.081Z",
+    "browserPrivateBytes": 349753344,
+    "browserWorkingSetBytes": 522387456,
+    "controllerPrivateBytes": 0,
+    "adapterRSS": 139665408
+  },
+  "coldStartMs": 5205.8993,
+  "coldReadMs": 2434.245999999999,
+  "warmConnectMs": 3894.9058999999997,
+  "warmReadMs": 2968.6041000000005,
+  "connected": {
+    "at": "2026-11-16T18:43:51.926Z",
+    "browserPrivateBytes": 519614464,
+    "browserWorkingSetBytes": 739897344,
+    "controllerPrivateBytes": 305651712,
+    "adapterRSS": 149557248
+  },
+  "idleMs": 603116.8773,
+  "afterIdleReadMs": 1604.5720999999903,
+  "afterIdleStatus": "connected",
+  "result": "passed",
+  "sourceCommit": "e8bcc731fc66d102f9e20bab9076fbfe45523f47",
+  "extensionVersion": "0.0.179",
+  "measurementContext": "Disposable instrumented Edge profile; control page closed; whole-process memory, not queue sizes. Runtime files unchanged from artifact source."
+}

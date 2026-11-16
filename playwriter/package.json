@@ -16,11 +16,15 @@
     "test": "vitest run -u",
     "test:watch": "vitest"
   },
-  "bin": "./bin.js",
+  "bin": {
+    "playwriter": "./bin.js",
+    "playwriter-tailcat": "./tailcat-bin.js"
+  },
   "files": [
     "dist",
     "src",
-    "bin.js"
+    "bin.js",
+    "tailcat-bin.js"
   ],
   "keywords": [],
   "author": "Tommaso De Rossi, morse <beats.by.morse@gmail.com>",

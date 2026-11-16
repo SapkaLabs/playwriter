@@ -3949,6 +3949,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       })
       return false
     }
+    if (import.meta.env.TESTING && message.action === 'tailcatTest' && remoteTunnel?.tunnel instanceof TailcatTunnel) {
+      const tunnel = remoteTunnel.tunnel
+      if (message.command === 'trace') {
+        sendResponse(tunnel.trace)
+        return false
+      }
+      void tunnel
+        .test(message.command, { cut: message.cut })
+        .then(sendResponse, () => sendResponse({ error: 'Test control failed' }))
+      return true
+    }
     if (message.action === 'tailcatCopy') {
       const text = remoteTunnel?.tailcat ? remoteTunnel.tunnel.url : ''
       void (text ? copyTextInOffscreenDocument(text) : Promise.reject(new Error('Share is not ready'))).then(

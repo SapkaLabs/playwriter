@@ -8,6 +8,7 @@ const relay = await startPlayWriterCDPRelayServer({
   sessionCounterFile: join(process.argv[3], 'session-counter'),
   allowLocalExtensions: false,
   cdpLogger: { log: () => {}, flush: async () => {}, logFilePath: '' },
+  logger: { log: () => {}, error: () => {} },
   extensionTimeouts: { command: 30_000, awaitPromise: 30_000 },
 })
 process.send?.({ ready: true })

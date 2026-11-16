@@ -3,6 +3,21 @@ import type { RemoteTunnelOptions, TunnelConnectionHandlers } from './remote-tun
 
 export class TailcatTunnel {
   url = ''
+  private readonly frames: Array<Record<string, unknown>> = []
+  private readonly socketEvents: Array<Record<string, unknown>> = []
+  get trace(): Array<Record<string, unknown>> {
+    return [...this.socketEvents, ...this.frames]
+  }
+  private record(event: Record<string, unknown>): void {
+    const events = String(event.stage).startsWith('derp-') ? this.socketEvents : this.frames
+    events.push(event)
+    if (events.length > (events === this.socketEvents ? 128 : 512)) events.shift()
+  }
+  test(action: string, data: Record<string, unknown> = {}): Promise<any> {
+    if (!import.meta.env.TESTING) return Promise.reject(new Error('Test controls are unavailable'))
+    if (action === 'dispose') this.closeGeneration(this.generation)
+    return this.request(action === 'cut' ? 'testCut' : 'testDispose', data)
+  }
   private port: chrome.runtime.Port | null = null
   private closed = false
   private serial = 0
@@ -31,6 +46,10 @@ export class TailcatTunnel {
     })
     port.onMessage.addListener((data) => {
       if (this.closed) return
+      if (data.trace) {
+        this.record(data.trace)
+        return
+      }
       if (data.fatal) {
         this.options.onFatal()
         return
@@ -72,7 +91,12 @@ export class TailcatTunnel {
     if (this.closed || this.stream) return
     this.generation = generation
     const stream = new FramedStream({
+      onFrame: (frame) => {
+        if (import.meta.env.TESTING) this.record({ stage: 'browser-frame', generation, at: Date.now(), ...frame })
+      },
       write: async (bytes) => {
+        if (import.meta.env.TESTING)
+          this.record({ stage: 'browser-pipe-write', generation, bytes: bytes.length, at: Date.now() })
         await this.request('write', {
           generation,
           base64: btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join('')),
@@ -95,6 +119,8 @@ export class TailcatTunnel {
             break
           }
           const bytes = Uint8Array.from(atob(result.base64), (c) => c.charCodeAt(0))
+          if (import.meta.env.TESTING)
+            this.record({ stage: 'browser-pipe-read', generation, bytes: bytes.length, at: Date.now() })
           if (bytes.length > MAX_CHUNK) throw new Error('Bridge chunk limit exceeded')
           await stream.receive(bytes)
         }

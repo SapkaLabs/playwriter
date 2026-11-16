@@ -5,11 +5,51 @@ export const MAX_PENDING = 32 * 1024 * 1024
 export const MAX_CHUNK = 64 * 1024
 const PREFACE = new Uint8Array([80, 87, 84, 67, 49, 10])
 const encoder = new TextEncoder()
+export type FrameMetadata = {
+  direction: 'read' | 'write'
+  id?: number
+  method?: string
+  cdpMethod?: string
+  bytes: number
+}
+function metadata(json: string, bytes: number, direction: 'read' | 'write'): FrameMetadata {
+  const message = JSON.parse(json)
+  return {
+    direction,
+    bytes,
+    id: message.id,
+    method: message.method,
+    cdpMethod:
+      /^(Target|Page|Runtime|DOM|Network|Input|Browser|Emulation|Storage|CSS|Debugger|Log|Accessibility)\.[A-Za-z]+$/.test(
+        message.params?.method,
+      )
+        ? message.params.method
+        : undefined,
+  }
+}
+const METHODS = new Set([
+  'forwardCDPCommand',
+  'forwardCDPEvent',
+  'hello',
+  'ready',
+  'ping',
+  'pong',
+  'log',
+  'createInitialTab',
+  'updateTabGroup',
+  'closeTabsForKey',
+  'ghost-browser',
+  'setRecorderState',
+  'getTabs',
+  'switchToTab',
+  'disconnectTab',
+])
 
 function validate(json: string): void {
   const message = JSON.parse(json)
   if (!message || typeof message !== 'object' || Array.isArray(message)) throw new Error('Invalid extension record')
   if (typeof message.method === 'string' && message.method.length > 0) {
+    if (!METHODS.has(message.method)) throw new Error('Unsupported extension method')
     if (message.id !== undefined && !Number.isSafeInteger(message.id)) throw new Error('Invalid extension request id')
     if (
       message.params !== undefined &&
@@ -49,6 +89,7 @@ export class FramedStream {
       onError(error: Error): void
       handshakeMs?: number
       handshakeStartsOnRead?: boolean
+      onFrame?(frame: FrameMetadata): void
     },
   ) {
     this.ready = new Promise((resolve, reject) => {
@@ -91,7 +132,7 @@ export class FramedStream {
           if (this.headerUsed < 4) continue
           const length = new DataView(this.header.buffer).getUint32(0)
           if (length < 1 || length > MAX_RECORD) throw new Error('Record length outside 1..16777216')
-          if (this.pending + length * 2 + MAX_CHUNK > MAX_PENDING) throw new Error('Pending data exceeds 32 MiB')
+          if (this.pending + length * 2 > MAX_PENDING) throw new Error('Pending data exceeds 32 MiB')
           this.body = new Uint8Array(length)
           this.bodyUsed = 0
         }
@@ -102,9 +143,12 @@ export class FramedStream {
         if (this.bodyUsed === this.body.length) {
           const json = new TextDecoder('utf-8', { fatal: true }).decode(this.body)
           validate(json)
-          await this.options.onMessage(json)
+          this.options.onFrame?.(metadata(json, this.body.length, 'read'))
+          // Release the assembled encoded copy before the consumer retains or
+          // re-encodes the JSON (e.g. WebSocket.send), keeping the same budget.
           this.body = null
           this.headerUsed = 0
+          await this.options.onMessage(json)
         }
       }
     } catch (error) {
@@ -121,8 +165,9 @@ export class FramedStream {
       return Promise.reject(error)
     }
     const bytes = encoder.encode(json)
-    // Reserve both encoded copies plus the native/bridge chunk before retaining work.
-    const reserved = bytes.length * 2 + 4 + MAX_CHUNK
+    // The queue retains only bytes, not the caller's JSON string. Chunk reserves
+    // include pipe/worker/base64 bridge copies; writes use views of this buffer.
+    const reserved = bytes.length + 4 * MAX_CHUNK
     if (
       !bytes.length ||
       bytes.length > MAX_RECORD ||
@@ -139,6 +184,7 @@ export class FramedStream {
         if (this.stopped) throw new Error('Connection generation is closed')
         const header = new Uint8Array(4)
         new DataView(header.buffer).setUint32(0, bytes.length)
+        this.options.onFrame?.(metadata(new TextDecoder().decode(bytes), bytes.length, 'write'))
         await this.options.write(header)
         for (let i = 0; i < bytes.length; i += MAX_CHUNK) {
           if (this.stopped) throw new Error('Connection generation is closed')

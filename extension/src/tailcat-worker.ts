@@ -17,6 +17,32 @@ let connection: Conn | null = null
 let listener: { close(): void } | null = null
 let generation = 0
 const reply = (id: number, result: unknown) => self.postMessage({ id, result })
+const sockets = new Set<WebSocket>()
+let cut = false
+if (import.meta.env.TESTING) {
+  const NativeWebSocket = globalThis.WebSocket
+  globalThis.WebSocket = class extends NativeWebSocket {
+    constructor(url: string | URL, protocols?: string | string[]) {
+      const endpoint = new URL(String(url))
+      const isDERP = endpoint.pathname === '/derp'
+      if (isDERP && cut) {
+        self.postMessage({ trace: { stage: 'derp-denied', endpoint: endpoint.origin, at: Date.now() } })
+        throw new Error('Test DERP data route is cut')
+      }
+      super(url, protocols)
+      if (!isDERP) return
+      sockets.add(this)
+      self.postMessage({ trace: { stage: 'derp-construct', endpoint: endpoint.origin, at: Date.now() } })
+      this.addEventListener('open', () =>
+        self.postMessage({ trace: { stage: 'derp-open', endpoint: endpoint.origin, at: Date.now() } }),
+      )
+      this.addEventListener('close', () => {
+        sockets.delete(this)
+        self.postMessage({ trace: { stage: 'derp-close', endpoint: endpoint.origin, at: Date.now() } })
+      })
+    }
+  }
+}
 
 self.onmessage = async ({ data }) => {
   const { id, action } = data
@@ -62,6 +88,15 @@ self.onmessage = async ({ data }) => {
         connection = null
         old?.close()
       }
+      reply(id, null)
+    } else if (import.meta.env.TESTING && action === 'testCut') {
+      cut = Boolean(data.cut)
+      if (cut) for (const socket of sockets) socket.close(4000, 'test data cut')
+      reply(id, { tracked: sockets.size, cut })
+    } else if (import.meta.env.TESTING && action === 'testDispose') {
+      const old = connection
+      connection = null
+      old?.close()
       reply(id, null)
     } else throw new Error('Unknown worker command')
   } catch {

@@ -38,10 +38,20 @@ Recorded before writing tests; the owner preapproved all six:
 - PASS: isolated controller creates an explicit remote session; existing CLI reads
   the fixture title through that session (2026-11-16, test duration 14.70 s).
 - PASS: portable Playwriter package build and extension TypeScript/Vite build.
-- Remaining: public connect/disconnect commands, complete packaging, protocol
-  negatives, actual native UI evidence, route socket cut, Stop/restart/no-replay
-  matrix, regressions, measurements, two-axis review and final delivery.
-- Next: finish controller lifecycle commands and real-socket observation/fault controls.
+- PASS: public foreground connect/disconnect, bounded operation fixtures, selected
+  JSON success/oversized/evicted body cases (no request reissue), real DERP socket
+  close/denied replacements, healthy loopback, terminal failed generation and
+  manual reconnect. Combined integration gate took 119.91 s on 2026-11-16.
+- PASS: nine framing checks including malformed data and the inclusive 16 MiB limit.
+- PASS: first controller dependency deployment and packaged CLI entry points.
+  Stable output cleanup/hash verification still needs final validation.
+- Native UI acceptance: **blocked/unrun**. Computer Use ended the initial turn
+  because it could not establish the disposable Edge window's URL confidently.
+  This is not replaced by helper-only evidence or automated DOM tests.
+- Remaining: full Stop/restart/no-replay/authentication matrix, regression checks,
+  measurements, final reproducibility/hashes, two-axis review and final delivery.
+- Next: source review, lifecycle/race coverage and complete bundle validation;
+  retry native UI only through the supported computer tool.
 
 Never record descriptors, PSKs, private-key JSON, capability URLs or browser
 payloads in this file or exported diagnostics. Record pass/fail/unrun separately

@@ -90,6 +90,7 @@ export async function connectTailcat(options: {
   stateDirectory: string
   listen?: string
   onFailure?(message: string): void
+  signal?: AbortSignal
 }) {
   const descriptor = await validateDescriptor(options.descriptor, options.nativePath)
   if (!/^127\.0\.0\.1:(0|[1-9]\d{0,4})$/.test(options.listen ?? '127.0.0.1:0'))
@@ -122,6 +123,8 @@ export async function connectTailcat(options: {
   let relay: ChildProcess | undefined
   let socket: WebSocket | null = null
   let nativePid = 0
+  const requests = new Map<number, ReturnType<typeof setTimeout>>()
+  const trace: Array<Record<string, unknown>> = []
   let queuedBytes = 0
   const queued: string[] = []
   const server = createServer((_request, response) => {
@@ -134,6 +137,10 @@ export async function connectTailcat(options: {
   })
   const startup = setTimeout(() => fail('Native startup timed out (60 s)'), 60_000)
   const stream = new FramedStream({
+    onFrame: (frame) => {
+      trace.push({ stage: 'controller-frame', at: Date.now(), ...frame })
+      if (trace.length > 512) trace.shift()
+    },
     // The pinned CLI exposes establishment through its first output bytes; the
     // independent 60 s startup timer bounds silent Ping/Dial before that point.
     handshakeStartsOnRead: true,
@@ -147,6 +154,11 @@ export async function connectTailcat(options: {
       }),
     onMessage: async (json) => {
       if (terminal) return
+      const message = JSON.parse(json)
+      if (typeof message.id === 'number' && !message.method) {
+        clearTimeout(requests.get(message.id))
+        requests.delete(message.id)
+      }
       if (socket) await sendWS(json)
       else {
         const size = Buffer.byteLength(json) * 2
@@ -168,17 +180,18 @@ export async function connectTailcat(options: {
     if (terminal) return
     terminal = true
     clearTimeout(startup)
+    for (const timer of requests.values()) clearTimeout(timer)
+    requests.clear()
+    // Terminate the dedicated relay before releasing its browser socket. Otherwise
+    // a pending Playwright call may settle during detach and look like a completed
+    // script. Closing the HTTP connection reports the dispatched outcome as unknown.
+    relay?.kill()
     stream.close()
     socket?.terminate()
     queued.length = 0
     queuedBytes = 0
-    if (sessionId && host)
-      await fetch(host + '/cli/session/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId }),
-        signal: AbortSignal.timeout(1000),
-      }).catch(() => {})
+    // The relay owns only this connection's in-memory session; process disposal
+    // removes it and prevents stock remote redials from reviving the generation.
     // IPC disconnect triggers each child's owned-resource cleanup, including native on Windows.
     if (native.connected) native.disconnect()
     if (relay?.connected) relay.disconnect()
@@ -188,6 +201,17 @@ export async function connectTailcat(options: {
     }, 1500).unref()
     wss.close()
     server.close()
+  }
+  options.signal?.addEventListener(
+    'abort',
+    () => {
+      void close()
+    },
+    { once: true },
+  )
+  if (options.signal?.aborted) {
+    await close()
+    throw new Error('Controller startup cancelled')
   }
   async function sendWS(json: string) {
     if (
@@ -247,6 +271,15 @@ export async function connectTailcat(options: {
           }
           ingressBytes += size
           const json = data.toString()
+          const message = JSON.parse(json)
+          if (typeof message.id === 'number') {
+            if (requests.size >= 4096) {
+              fail('Too many outstanding commands')
+              return
+            }
+            const timer = setTimeout(() => fail('Fixture command timed out (30 s); outcome unknown'), 30_000)
+            requests.set(message.id, timer)
+          }
           wsIngress = wsIngress
             .then(async () => {
               if (terminal) return
@@ -308,6 +341,7 @@ export async function connectTailcat(options: {
       relayPid: relay.pid,
       adapterPid: process.pid,
       failures,
+      trace,
       close,
       isTerminal: () => terminal,
     }

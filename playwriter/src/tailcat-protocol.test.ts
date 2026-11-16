@@ -25,4 +25,51 @@ describe('public Tailcat framed byte stream', () => {
     expect(received).toEqual(['{"id":1,"result":"ї"}'])
     stream.close()
   })
+
+  it.each([
+    ['preface mismatch', [0], 'preface'],
+    ['zero record', [80, 87, 84, 67, 49, 10, 0, 0, 0, 0], 'length'],
+    ['oversized record', [80, 87, 84, 67, 49, 10, 1, 0, 0, 1], 'length'],
+    ['invalid UTF-8', [80, 87, 84, 67, 49, 10, 0, 0, 0, 1, 255], 'encoded'],
+    ['invalid JSON', [80, 87, 84, 67, 49, 10, 0, 0, 0, 1, 123], 'JSON'],
+    ['invalid schema', [80, 87, 84, 67, 49, 10, 0, 0, 0, 2, 91, 93], 'record'],
+  ])('fails closed on %s', async (_name, bytes, expected) => {
+    const errors: string[] = []
+    const stream = new FramedStream({
+      write: async () => {},
+      onMessage: async () => {
+        throw new Error('must not dispatch')
+      },
+      onError: (error) => {
+        errors.push(error.message)
+      },
+    })
+    await stream.start()
+    await stream.receive(new Uint8Array(bytes as number[]))
+    expect(errors.join(' ')).toContain(expected)
+    await expect(stream.send('{"method":"ping"}')).rejects.toThrow('closed')
+  })
+
+  it('rejects an unknown extension method instead of announcing protocol readiness', async () => {
+    const errors: Error[] = []
+    const stream = new FramedStream({
+      write: async () => {},
+      onMessage: async () => {},
+      onError: (e) => {
+        errors.push(e)
+      },
+    })
+    await stream.start()
+    await stream.receive(new Uint8Array([80, 87, 84, 67, 49, 10]))
+    await expect(stream.send('{"method":"invented-command"}')).rejects.toThrow('method')
+    stream.close()
+  })
+  it('accepts the inclusive 16 MiB record limit without retaining an extra encoded copy', async () => {
+    const stream = new FramedStream({ write: async () => {}, onMessage: async () => {}, onError: () => {} })
+    await stream.start()
+    await stream.receive(new Uint8Array([80, 87, 84, 67, 49, 10]))
+    const json = '{"id":1,"result":"' + 'x'.repeat(16_777_196) + '"}'
+    await expect(stream.send(json)).resolves.toBeUndefined()
+    stream.close()
+  })
 })

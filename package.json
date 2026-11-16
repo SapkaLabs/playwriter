@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "test": "pnpm --filter playwriter test",
+    "tailcat:build": "node scripts/build-tailcat-bundles.mjs",
     "watch": "pnpm -r watch",
     "format": "prettier --write .",
     "cli": "pnpm --filter playwriter cli",

@@ -122,5 +122,16 @@
     "cause": "unproven",
     "retainedZip": "dist/public-derp-dev-win32-x64-3495f02.zip",
     "note": "Fresh fixture/run passed with unchanged operation scripts and deadlines; no runtime fix is claimed."
+  },
+  "ctrlC": {
+    "result": "passed",
+    "signal": "Real Windows CTRL_C_EVENT to verified test-owned hidden console",
+    "consoleProcesses": 2,
+    "positiveBoundRead": true,
+    "adapterNativeRelayExited": true,
+    "registryRemoved": true,
+    "browserSharingRemainedActiveUntilNativeStop": true,
+    "nativeStopThenStopped": true,
+    "ptyAttempt": "Unified exec PTY creation denied with OS error5; no PTY result claimed"
   }
 }

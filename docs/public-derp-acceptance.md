@@ -22,12 +22,18 @@ cause remain recorded below. No deadline or operation was weakened to pass.
 | Actual restarts | Background-worker, extension and browser restarts all revoke old descriptors before/after released fresh positive controls: 66.03/69.91/70.94 s. |
 | Authentication/privacy/framing | Real wrong-PSK/substituted-key negatives and original positive control pass (80.93 s); missing/zero PSKs rejected. Privacy regression passes (5.45 s). All 26 framing cases pass in the ordinary suite. A 1 MiB response followed by a 16-byte response passes; the final small response took 0.82 s. |
 | Ordinary compatibility/checks | Complete ordinary suite: 411 passed, 21 gated tests skipped; 35 files passed/eight skipped; no unhandled errors (391.28 s serially). Typecheck, pinned provisioning and builds pass. |
-| Review/cleanup | Three independent Standards/Spec review rounds; material findings resolved, including the owner-approved native establishment launcher. Owned UI profiles/controllers are closed; no owned controller children remain. B/UI harness listeners are released. Personal profiles and the ordinary 19988 relay were not modified. |
+| Review/cleanup | Three independent Standards/Spec review rounds; material findings resolved, including the owner-approved native establishment launcher. Actual Windows Ctrl+C event cleans the packaged adapter/native/relay and registry; browser sharing remains active until native Stop, which then revokes locally. Owned UI profiles/controllers are closed; B/UI harness listeners released. Personal profiles and the ordinary 19988 relay were not modified. |
 
 The final serial integration batch reported **19 passed / one failed**. The
 failed production-delivery case was then run with bounded timing/stage
 diagnostics in a fresh profile and fixture and passed. Do not describe the
 earlier combined command as a wholly green run.
+
+For the Ctrl+C check, unified exec could not allocate a PTY (OS access-denied
+error 5). A real Windows `CTRL_C_EVENT` was instead delivered to an owned hidden
+console after verifying every console member belonged to the disposable test.
+The actual packaged supervisor and its children exited and removed the registry;
+native browser Stop remained usable afterward. No terminal UI was automated.
 
 ## Timing and memory
 

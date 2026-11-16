@@ -4,6 +4,7 @@
  * service worker sends copyText and playSound messages here.
  */
 
+import './tailcat-offscreen'
 import type {
   OffscreenMessage,
   OffscreenCopyTextMessage,

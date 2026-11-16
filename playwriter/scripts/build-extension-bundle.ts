@@ -44,11 +44,12 @@ function runCommand({
 }
 
 async function main(): Promise<void> {
-  const pnpmCommand = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
+  const pnpmScript = process.env.npm_execpath
+  if (!pnpmScript) throw new Error('Run the package build through pnpm')
 
   await runCommand({
-    command: pnpmCommand,
-    args: ['build'],
+    command: process.execPath,
+    args: [pnpmScript, 'build'],
     cwd: extensionDir,
     env: {
       ...process.env,

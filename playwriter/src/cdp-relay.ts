@@ -179,6 +179,8 @@ export async function startPlayWriterCDPRelayServer({
   sessionCounterFile,
   onDrained,
   extensionTimeouts,
+  stateDirectory,
+  allowLocalExtensions = true,
 }: {
   port?: number
   host?: string
@@ -191,6 +193,10 @@ export async function startPlayWriterCDPRelayServer({
   onDrained?: () => void
   /** Timeouts for commands forwarded to the extension, in ms. Tests pass short values */
   extensionTimeouts?: Partial<typeof DEFAULT_EXTENSION_TIMEOUTS>
+  /** Dedicated controllers isolate recovery state from the user's ordinary daemon. */
+  stateDirectory?: string
+  /** Remote-only supervisors must never accept an ordinary local extension. */
+  allowLocalExtensions?: boolean
 } = {}): Promise<RelayServer> {
   const timeouts = { ...DEFAULT_EXTENSION_TIMEOUTS, ...extensionTimeouts }
   const humanInput = createHumanInput({ log: (message) => logger?.log(message) })
@@ -2002,6 +2008,7 @@ export async function startPlayWriterCDPRelayServer({
       // 2. Origin Validation: Prevent browser-based attacks (CSRF).
       // Browsers cannot spoof the Origin header, so this ensures the connection
       // is coming from our specific Chrome Extension, not a malicious website.
+      if (!allowLocalExtensions) return c.text('Local extensions are disabled on this owned relay', 403)
       const origin = c.req.header('origin')
       if (!origin || !origin.startsWith('chrome-extension://')) {
         logger?.log(
@@ -3746,7 +3753,7 @@ export async function startPlayWriterCDPRelayServer({
   // if the relay process crashes. On startup, read the file and disconnect
   // any leftover VMs (best-effort).
 
-  const CLOUD_SESSIONS_FILE = path.join(os.homedir(), '.playwriter', 'cloud-sessions.json')
+  const CLOUD_SESSIONS_FILE = path.join(stateDirectory || path.join(os.homedir(), '.playwriter'), 'cloud-sessions.json')
 
   interface PersistedCloudSession {
     cloudSessionId: string

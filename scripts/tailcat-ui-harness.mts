@@ -33,7 +33,8 @@ const context = await chromium.launchPersistentContext(profile, {
     '--no-default-browser-check',
   ],
 })
-await context.pages()[0].goto(fixture.url)
+const fixturePage = context.pages()[0]
+await fixturePage.goto(fixture.url)
 const control = await context.newPage()
 await control.goto('chrome-extension://pebbngnfojnignonigcnkdilknapkgid/src/tailcat-share.html')
 await writeFile(
@@ -73,6 +74,28 @@ const commands = createServer(async (request, response) => {
         JSON.stringify({ trace, rejectedUpgrades, requests: fixture.requests, at: new Date().toISOString() }, null, 2),
       )
       response.end((await control.getByRole('status').textContent()) || '')
+    } else if (
+      /^\/barrier\/(arm|release|status)\/(startup-before-listen|startup-after-descriptor|dispatch)$/.test(
+        request.url || '',
+      )
+    ) {
+      const [, , operation, name] = request.url!.split('/')
+      const command = operation === 'arm' ? 'barrierArm' : operation === 'release' ? 'barrierRelease' : 'barrierStatus'
+      const result = await control.evaluate(
+        ({ command, name }) =>
+          chrome.runtime.sendMessage({
+            action: 'tailcatTest',
+            command,
+            name,
+            method: name === 'dispatch' ? 'Runtime.evaluate' : undefined,
+          }),
+        { command, name },
+      )
+      response.setHeader('Content-Type', 'application/json')
+      response.end(JSON.stringify(result))
+    } else if (request.url === '/fixture-close') {
+      await fixturePage.close()
+      response.end('owned fixture tab closed')
     } else if (request.url === '/cut' || request.url === '/restore' || request.url === '/dispose') {
       const command = request.url === '/dispose' ? 'dispose' : 'cut'
       await control.evaluate(

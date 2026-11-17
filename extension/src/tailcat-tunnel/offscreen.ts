@@ -28,6 +28,13 @@ chrome.runtime.onConnect.addListener((port) => {
     port.postMessage(data)
   }
   port.onMessage.addListener((data) => {
+    if (data.action === 'stop') {
+      worker.terminate()
+      if (owner === port) owner = null
+      port.postMessage({ stopped: true })
+      port.disconnect()
+      return
+    }
     if (import.meta.env.TESTING && data.action === 'testKill') {
       port.postMessage({ fatal: 'Transport worker terminated for test; sharing revoked' })
       dispose()

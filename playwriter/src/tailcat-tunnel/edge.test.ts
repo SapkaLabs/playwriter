@@ -79,10 +79,9 @@ it.runIf(process.env.PLAYWRITER_TAILCAT_TESTS === '1')(
       // Clipboard is kept private inside this disposable profile; never print the descriptor.
       const descriptor = JSON.parse(await control.getByLabel('Connection information').inputValue())
       expect(descriptor).toMatchObject({
-        v: 1,
+        v: 2,
         transport: 'playwriter-tailcat',
         port: 1,
-        relayMode: 'public',
         derpMapURL: PUBLIC_DERP_MAP,
       })
       native = spawn(nativePath, ['--key=new', `--derpmap-url=${PUBLIC_DERP_MAP}`, descriptor.addr, '1'], {

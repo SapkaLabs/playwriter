@@ -1,5 +1,8 @@
 # Windows Edge public DERP developer PoC
 
+For configurable profiles and v2 descriptors, use [the Stage 1 guide](configurable-derp.md).
+Build commands below still apply; the historical output directory name remains.
+
 Status: same-machine developer PoC acceptance demonstrated on artifact source
 `e8bcc731fc66d102f9e20bab9076fbfe45523f47`, extension 0.0.179. Read
 [the final results and retained failure](public-derp-acceptance.md) and
@@ -119,8 +122,8 @@ Transport code is grouped in `extension/src/tailcat-tunnel/` and
 native launcher and transport tests. The extension's `src/tailcat-share.html`
 and package `tailcat-bin.js` remain the stable public entrypoints.
 
-The unchanged upstream `tailcatListen({derpMapURL,onConnection})` promise returns
-`addr`, private-key JSON and `close()`. Only `addr` crosses the Playwriter worker
+The owned `tailcatListen({configuration,onConnection})` bridge consumes frozen,
+validated map bytes and returns `addr` and `close()`. Only `addr` crosses the Playwriter worker
 boundary. Each accepted connection exposes its logical port, pull-based
 `read(): Promise<Uint8Array|null>`, `write(bytes)`, `closeWrite()` and `close()`.
 `null` is EOF; reads share an upstream 64 KiB buffer and must be serialized.
@@ -135,8 +138,9 @@ separate from that worker's lifetime. Runtime/port loss requires a fresh Start.
 
 The controller packages the unchanged pinned CLI for address parsing and a
 Playwriter-owned `tailcat-launcher` built against that same library. The launcher
-uses a fresh in-memory node key, the fixed public map, and port 1; it reads no
-named keys. Its map cache is the library's process-local in-memory default.
+uses a fresh in-memory node key, the descriptor-bound map, and port 1; it reads no
+named keys. Its map cache is a read-only per-connection projection of the validated
+region; it cannot refetch, use stale data, or merge a default map.
 Only a fixed local stderr notification crosses to the supervisor after TCP Dial;
 stdout remains the binary protocol. Startup is bounded to 60 s and the preface
 timer begins at that notification with its unchanged 10 s limit. The controller

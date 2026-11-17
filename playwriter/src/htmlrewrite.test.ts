@@ -7957,7 +7957,9 @@ test('keeps all common e2e test ID attributes', async () => {
 })
 
 test('processes x.com.html with size savings', async () => {
-  const html = fs.readFileSync(new URL('./assets/x.com.html', import.meta.url), 'utf-8')
+  // Git may check this fixture out as CRLF on Windows; snapshot truncation
+  // lengths describe the same logical input on every platform.
+  const html = fs.readFileSync(new URL('./assets/x.com.html', import.meta.url), 'utf-8').replaceAll('\r\n', '\n')
 
   const result = await formatHtmlForPrompt({ html })
   const resultWithStyles = await formatHtmlForPrompt({ html, keepStyles: true })

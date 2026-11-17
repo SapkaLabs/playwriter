@@ -1,0 +1,124 @@
+[
+  {
+    "name": "case aliases cannot retarget routing",
+    "body": {
+      "Regions": {
+        "900": {
+          "RegionID": 900,
+          "Nodes": [
+            {
+              "Name": "node",
+              "RegionID": 900,
+              "HostName": "relay-a.example",
+              "DERPPort": 8443,
+              "hostname": "relay-b.example",
+              "derpport": 9999
+            }
+          ]
+        }
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "unknown typed metadata is ignored",
+    "body": {
+      "Regions": {
+        "900": {
+          "RegionID": 900,
+          "Nodes": [
+            {
+              "Name": "node",
+              "RegionID": 900,
+              "HostName": "relay-a.example",
+              "DERPPort": 8443
+            }
+          ],
+          "RegionName": {
+            "unexpected": true
+          },
+          "RegionCode": []
+        }
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "long UTF8 node name rejected consistently",
+    "body": {
+      "Regions": {
+        "900": {
+          "RegionID": 900,
+          "Nodes": [
+            {
+              "Name": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+              "RegionID": 900,
+              "HostName": "relay-a.example",
+              "DERPPort": 8443
+            }
+          ]
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "null optional routing field rejected",
+    "body": {
+      "Regions": {
+        "900": {
+          "RegionID": 900,
+          "Nodes": [
+            {
+              "Name": "node",
+              "RegionID": 900,
+              "HostName": "relay-a.example",
+              "DERPPort": 8443,
+              "IPv4": null
+            }
+          ]
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "insecure override rejected",
+    "body": {
+      "Regions": {
+        "900": {
+          "RegionID": 900,
+          "Nodes": [
+            {
+              "Name": "node",
+              "RegionID": 900,
+              "HostName": "relay-a.example",
+              "DERPPort": 8443,
+              "InsecureForTests": true
+            }
+          ]
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "invalid port rejected",
+    "body": {
+      "Regions": {
+        "900": {
+          "RegionID": 900,
+          "Nodes": [
+            {
+              "Name": "node",
+              "RegionID": 900,
+              "HostName": "relay-a.example",
+              "DERPPort": 65536
+            }
+          ]
+        }
+      }
+    },
+    "valid": false
+  }
+]

@@ -1,0 +1,132 @@
+{
+  "recordedAt": "2026-11-17T17:23:07.390Z",
+  "scope": "Stage 1 only; controlled maps and real public DERP; no private validation",
+  "baseline": "2905b02f008665e4baf3692e3b28ec8abfa4ae00",
+  "implementationPatchSHA256": "dd7400c389d53bc36d2071c8baca62952dc2c75c245fd55916ef5e216358e755",
+  "platform": "win32",
+  "node": "v24.12.0",
+  "browser": "157.0.4341.46",
+  "extensionVersion": "0.0.181",
+  "upstreamPin": "e00cdde6ff787f801361ff85ed085775c775d4c5",
+  "ordinaryRegression": {
+    "passed": 455,
+    "failed": 0,
+    "skipped": 30,
+    "success": true
+  },
+  "configurationCLIAndFraming": {
+    "passed": 70,
+    "failed": 0,
+    "skipped": 0,
+    "success": true
+  },
+  "rebuiltBrowserAndRouteChecks": {
+    "passed": 8,
+    "failed": 0,
+    "skipped": 11,
+    "success": true
+  },
+  "ownershipRoutingAndPackagedDelivery": {
+    "passed": 3,
+    "failed": 0,
+    "skipped": 0,
+    "success": true
+  },
+  "broadTransportRun": {
+    "passed": 84,
+    "failed": 2,
+    "skipped": 2,
+    "success": false,
+    "note": "Initial UI-status and cached-validator failures corrected; fresh affected checks above passed. This is retained history, not the final gate."
+  },
+  "realPublic": {
+    "routeResult": "passed",
+    "routeAt": "2026-11-17T17:10:45.397Z",
+    "packagedResult": "passed",
+    "packagedAt": "2026-11-17T17:13:49.465Z",
+    "packagedOperations": 12,
+    "completedPackagedOperations": 12
+  },
+  "bundle": {
+    "sourceCommit": "2905b02f008665e4baf3692e3b28ec8abfa4ae00",
+    "sourceDirty": true,
+    "testing": false,
+    "files": 14530,
+    "inventorySHA256": "8676c02eed3a8e5487175e182241ea9906f23cfe39a8363d766cb6ef6c4c1359",
+    "selectedFiles": [
+      {
+        "path": "extension/background.js",
+        "bytes": 228692,
+        "sha256": "2c9b31fddb5f654a40b4e273dc3c5c42418ff492f028436ee8054ea06542fbcc"
+      },
+      {
+        "path": "extension/tailcat/main.wasm",
+        "bytes": 28126119,
+        "sha256": "9ed7f2733f807fd29f610d2baf9fdbfc298cddd94beaa55a730535d40b07b32a"
+      },
+      {
+        "path": "extension/tailcat-share.js",
+        "bytes": 6298,
+        "sha256": "d5189be92049c1217176a01cf0ba2a854633c5e1abbb54cea2000aa18e15322a"
+      },
+      {
+        "path": "controller/dist/tailcat-tunnel/cli.js",
+        "bytes": 9858,
+        "sha256": "75e15f03309b7b960c0673afee00830377cfb8cc7aaf432559fad9cee8e2123b"
+      },
+      {
+        "path": "controller/dist/tailcat-tunnel/config.js",
+        "bytes": 6403,
+        "sha256": "be542408bd75432c99d8b0facdd65e6b025a1adea850905cdf078bd5f3ba7c9d"
+      },
+      {
+        "path": "controller/dist/tailcat-tunnel/controller.js",
+        "bytes": 17524,
+        "sha256": "2bab33366da24811e7710648645e0f4c9c736b729727647e8ad7366ab1567dfd"
+      },
+      {
+        "path": "controller/dist/tailcat-tunnel/descriptor.js",
+        "bytes": 2068,
+        "sha256": "f0ad5fd48f0017a547baf1a1dd824f55c4ea4e43b80d5623205fa57a11bea8f4"
+      },
+      {
+        "path": "controller/dist/tailcat-tunnel/map.js",
+        "bytes": 7704,
+        "sha256": "5c0e445b219200b0cc9ba7ecd37dfe79d07c557bd30a46518471e11a1efbc392"
+      },
+      {
+        "path": "controller/tailcat/tailcat-launcher.exe",
+        "bytes": 23247360,
+        "sha256": "7b07c54959211d02e243bd57c63b841147f41e68af145ce5446b3a9533e34969"
+      }
+    ]
+  },
+  "nativeValidation": "Go shared corpus and actual Tailcat expansion tests passed; unchanged upstream transport pin",
+  "crossPlatform": {
+    "configurationPaths": [
+      "Windows",
+      "macOS",
+      "Linux"
+    ],
+    "launcherCompiled": [
+      "windows/amd64",
+      "linux/amd64",
+      "darwin/amd64",
+      "js/wasm"
+    ],
+    "actualRuntime": [
+      "Windows Edge"
+    ],
+    "unrunRuntime": [
+      "macOS",
+      "Linux"
+    ]
+  },
+  "deferred": [
+    "Actual private server qualification (#15)",
+    "Independent real-server switching",
+    "Separate-machine topology and expanded browser/platform runtime matrix",
+    "Optional ten-minute performance remeasurement"
+  ],
+  "privacy": "Summary only. No descriptors, credentials, map bodies, private endpoints, local profile paths or raw captures."
+}

@@ -497,6 +497,104 @@ test('A failed hosted Connect leaves the selection pending and revokes Local', a
   }
 }, 45_000)
 
+async function holdDebuggerDetach(worker: Awaited<ReturnType<typeof getServiceWorker>>) {
+  return worker.evaluateHandle(() => {
+    const detach = chrome.debugger.detach.bind(chrome.debugger)
+    const gate = Promise.withResolvers<void>()
+    let entered = false
+    function delayed(target: chrome.debugger.Debuggee): Promise<void>
+    function delayed(target: chrome.debugger.Debuggee, callback: () => void): void
+    function delayed(target: chrome.debugger.Debuggee, callback?: () => void) {
+      if (callback) return detach(target, callback)
+      entered = true
+      return gate.promise.then(() => detach(target))
+    }
+    chrome.debugger.detach = delayed
+    return {
+      started: () => entered,
+      release() {
+        chrome.debugger.detach = detach
+        gate.resolve()
+      },
+    }
+  })
+}
+
+test('a stalled Local detach prevents route replacement and leaves the settings usable', async () => {
+  const fixture = await createSimpleServer({ routes: { '/': '<title>Cleanup fixture</title>' } })
+  try {
+    await withSettings(async ({ browser, serviceWorker, settings, status, route, connect }) => {
+      const page = await browser.newPage()
+      await page.goto(fixture.baseUrl)
+      await connect.click()
+      await status.getByText('1 attached tab', { exact: true }).waitFor()
+      const gate = await holdDebuggerDetach(serviceWorker)
+      try {
+        await route('playwriter.dev').check()
+        await connect.click()
+        await settings.getByRole('dialog').getByRole('button', { name: 'Share browser' }).click()
+        await settings
+          .getByRole('alert')
+          .getByText('Previous connection cleanup is incomplete.', { exact: false })
+          .waitFor({ timeout: 15_000 })
+        await status.getByText('Disconnected', { exact: true }).waitFor()
+        expect(await route('playwriter.dev').isChecked()).toBe(true)
+        expect(await connect.isEnabled()).toBe(true)
+      } finally {
+        await gate.evaluate(({ release }) => release())
+        await gate.dispose()
+      }
+      await route('Local').check()
+      await connect.click()
+      await status.getByText('1 attached tab', { exact: true }).waitFor()
+    })
+  } finally {
+    await fixture.close()
+  }
+}, 60_000)
+
+test('Stop cancels a legacy share waiting for Local tab cleanup', async () => {
+  const fixture = await createSimpleServer({ routes: { '/': '<title>Legacy cancellation fixture</title>' } })
+  const edge = new WebSocketServer({ host: '127.0.0.1', port: 0 })
+  try {
+    await once(edge, 'listening')
+    const address = edge.address()
+    if (!address || typeof address === 'string') throw new Error('No hosted tunnel fixture port')
+    await withSettings(
+      async ({ browser, serviceWorker, status, connect }) => {
+        const page = await browser.newPage()
+        await page.goto(fixture.baseUrl)
+        await connect.click()
+        await status.getByText('1 attached tab', { exact: true }).waitFor()
+        await page.bringToFront()
+        const gate = await holdDebuggerDetach(serviceWorker)
+        const started = serviceWorker.evaluate(async () => {
+          try {
+            await globalThis.startRemoteControlForActiveTab()
+            return false
+          } catch (error) {
+            return error instanceof Error && error.message.includes('SHARE_REVOKED')
+          }
+        })
+        try {
+          await expect.poll(() => gate.evaluate(({ started }) => started())).toBe(true)
+          await serviceWorker.evaluate(() => globalThis.stopRemoteControl())
+        } finally {
+          await gate.evaluate(({ release }) => release())
+          await gate.dispose()
+        }
+        expect(await started).toBe(true)
+        expect(edge.clients.size).toBe(0)
+      },
+      { initializeProfile: (worker) => redirectHostedTransport(worker, `ws://127.0.0.1:${address.port}`) },
+    )
+  } finally {
+    for (const socket of edge.clients) socket.terminate()
+    await new Promise<void>((resolve) => edge.close(() => resolve()))
+    await fixture.close()
+  }
+}, 60_000)
+
 test('Public Tailcat requires consent and a build without Tailcat fails disconnected', async () => {
   await withSettings(async ({ settings, status, route, connect, cli }) => {
     await connect.click()
@@ -523,8 +621,82 @@ test('Public Tailcat requires consent and a build without Tailcat fails disconne
   })
 }, 60_000)
 
+test('Manage Servers saves custom maps and keeps Public Tailcat available', async () => {
+  await withSettings(async ({ settings, status }) => {
+    await status.getByText('Disconnected', { exact: true }).waitFor()
+    await settings.getByRole('link', { name: 'Manage Servers' }).click({ timeout: 3000 })
+    await settings.getByRole('heading', { name: 'Manage Servers' }).waitFor()
+    const row = (name: string) => settings.getByRole('listitem').filter({ hasText: name })
+    const publicServer = row('Public Tailcat')
+    await publicServer.getByText('Built in', { exact: true }).waitFor()
+    expect(await publicServer.getByRole('button').count()).toBe(0)
+
+    await settings.getByRole('button', { name: 'Add server' }).click()
+    await settings.getByLabel('Name', { exact: true }).fill('Lab relay')
+    const map = settings.getByLabel('HTTPS DERP map URL')
+    await map.fill('http://fixture.invalid/map.json')
+    const save = settings.getByRole('button', { name: 'Save server' })
+    await save.click()
+    await settings.getByRole('alert').getByText('Supply an absolute HTTPS DERP-map URL', { exact: false }).waitFor()
+    await map.fill('https://fixture.invalid/map.json')
+    await save.click()
+    const custom = row('Lab relay')
+    await custom.getByRole('button', { name: 'Validate' }).click()
+    const error = settings.getByRole('alert')
+    await error.getByText('check network, TLS and permissions', { exact: false }).waitFor({ timeout: 15_000 })
+    expect((await error.innerText()).includes('fixture.invalid')).toBe(false)
+
+    await custom.getByRole('button', { name: 'Edit' }).click()
+    await settings.getByLabel('Name', { exact: true }).fill('Updated relay')
+    await save.click()
+    await settings.getByRole('link', { name: 'Connection', exact: true }).click()
+    await settings.getByRole('radio', { name: 'Tailcat', exact: true }).check()
+    const servers = settings.getByRole('combobox', { name: 'Tailcat server' })
+    await servers.selectOption({ label: 'Updated relay' })
+    await settings.getByRole('link', { name: 'Manage Servers' }).click()
+    await row('Updated relay').getByRole('button', { name: 'Remove' }).click()
+    await settings.getByRole('dialog').getByRole('button', { name: 'Remove server' }).click()
+    await row('Updated relay').waitFor({ state: 'detached' })
+    await settings.getByRole('link', { name: 'Connection', exact: true }).click()
+    await expect.poll(() => servers.locator('option:checked').textContent()).toBe('Public Tailcat')
+    expect(await servers.locator('option').count()).toBe(1)
+  })
+}, 60_000)
+
+test('a changed server revision needs fresh sharing consent', async () => {
+  await withSettings(async ({ browser, settings, status, connect, route, cli }) => {
+    await connect.click()
+    await status.getByText('Connected to Local', { exact: true }).waitFor()
+    const { settings: manager } = await openSettings(browser)
+    await manager.getByRole('link', { name: 'Manage Servers' }).click()
+    await manager.getByRole('button', { name: 'Add server' }).click()
+    await manager.getByLabel('Name', { exact: true }).fill('Lab relay')
+    const input = manager.getByLabel('HTTPS DERP map URL')
+    await input.fill('https://fixture.invalid/original.json')
+    const save = manager.getByRole('button', { name: 'Save server' })
+    await save.click()
+
+    await route('Tailcat').check()
+    const choice = settings.getByRole('combobox', { name: 'Tailcat server' })
+    await expect.poll(() => choice.locator('option').count()).toBe(2)
+    await choice.selectOption({ label: 'Lab relay' })
+    await connect.click()
+    const consent = settings.getByRole('dialog', { name: 'Share browser through Lab relay' })
+    await consent.waitFor()
+    await manager.getByRole('button', { name: 'Edit' }).click()
+    await input.fill('https://fixture.invalid/revised.json')
+    await save.click()
+    await save.waitFor({ state: 'hidden' })
+
+    await consent.getByRole('button', { name: 'Share browser' }).click()
+    await settings.getByRole('alert').getByText('The selected connection changed.', { exact: false }).waitFor()
+    await status.getByText('Connected to Local', { exact: true }).waitFor()
+    expect((await cli('session', 'new', '--tab-group', 'fixture')).ok).toBe(true)
+  })
+}, 60_000)
+
 test.runIf(process.env.PLAYWRITER_TAILCAT_DELIVERY === '1')(
-  'the packaged public relay and CLI switch between browser-wide grants and revoke old credentials',
+  'the packaged Tailcat controller and CLI switch between browser-wide grants and revoke old credentials',
   async () => {
     const edge = process.env.PLAYWRITER_TEST_LIVE_HOSTED === '1' ? undefined : await startHostedTransportFixture()
     const bundle = join(root, 'dist/public-derp')
@@ -629,21 +801,21 @@ test.runIf(process.env.PLAYWRITER_TAILCAT_DELIVERY === '1')(
               .click()
             await status.getByText(`Connected to ${name}`, { exact: true }).waitFor({ timeout: 65_000 })
           }
-          const copyDescriptor = async (optionsPage = settings) => {
+          const parseDescriptor = (text: string) => {
+            try {
+              const descriptor = descriptorConfiguration(JSON.parse(text))
+              if (descriptor.v === 2) return descriptor
+            } catch {}
+            throw new Error('Settings did not copy valid v2 connection information')
+          }
+          const copyDescriptor = async (optionsPage = settings, expectedMapURL = PUBLIC_DERP_MAP) => {
             const copy = optionsPage.getByRole('button', { name: 'Copy connection information' })
             await copy.click()
             await optionsPage.getByText('Copied connection information', { exact: true }).waitFor()
             const text: unknown = await optionsPage.evaluate(() => Reflect.get(navigator, 'clipboard').readText())
             if (typeof text !== 'string') throw new Error('Settings did not copy connection information')
-            const descriptor = (() => {
-              try {
-                return descriptorConfiguration(JSON.parse(text))
-              } catch {
-                throw new Error('Settings did not copy valid connection information')
-              }
-            })()
-            expect(descriptor.v).toBe(2)
-            expect(descriptor.derpMapURL === PUBLIC_DERP_MAP).toBe(true)
+            const descriptor = parseDescriptor(text)
+            expect(descriptor.derpMapURL === expectedMapURL).toBe(true)
             expect((await optionsPage.locator('body').innerText()).includes(descriptor.addr)).toBe(false)
             const legacy = await browser.newPage()
             try {
@@ -657,7 +829,7 @@ test.runIf(process.env.PLAYWRITER_TAILCAT_DELIVERY === '1')(
           }
           const activeController = async (descriptor: string) => {
             const result = await dial(descriptor)
-            if (result.kind !== 'ready') throw new Error('Packaged controller never reached the public relay')
+            if (result.kind !== 'ready') throw new Error('Packaged controller never reached the selected relay')
             return result
           }
           const expectControllerRevoked = async ({ host, session }: Awaited<ReturnType<typeof activeController>>) => {
@@ -673,8 +845,8 @@ test.runIf(process.env.PLAYWRITER_TAILCAT_DELIVERY === '1')(
           await confirm('Public Tailcat')
           expect((await local(titles)).ok).toBe(false)
           await status.getByText('1 attached tab', { exact: true }).waitFor()
-          const first = await copyDescriptor()
-          const publicClient = await activeController(first)
+          const initialPublic = await copyDescriptor()
+          const publicClient = await activeController(initialPublic)
           expect(await runPackaged(publicClient.host, publicClient.session, titles)).toBe(showTitle)
           console.info('Settings route verified: Local → Public Tailcat')
 
@@ -708,11 +880,96 @@ test.runIf(process.env.PLAYWRITER_TAILCAT_DELIVERY === '1')(
           )
           console.info('Public Tailcat verified: owned tab and popup stay private to their CLI session')
 
-          await route('playwriter.dev').check()
+          const customMap = 'https://controlplane.tailscale.com/derpmap/default'
+          const unreachableMap = 'https://fixture.invalid/derp-map.json'
+          const { settings: manager } = await openSettings(browser)
+          await manager.getByRole('link', { name: 'Manage Servers' }).click()
+          const mapInput = manager.getByLabel('HTTPS DERP map URL')
+          const saveServer = manager.getByRole('button', { name: 'Save server' })
+          const customRow = manager.getByRole('listitem').filter({ hasText: 'Custom fixture' })
+          await manager.getByRole('button', { name: 'Add server' }).click()
+          await manager.getByLabel('Name', { exact: true }).fill('Custom fixture')
+          await mapInput.fill(customMap)
+          await saveServer.click()
+          await customRow.getByRole('button', { name: 'Validate' }).click()
+          const validation = manager.getByText('Map validated.', { exact: false })
+          await validation.waitFor({ timeout: 15_000 })
+          const validatedRegions = /\b(\d+) regions? available\./.exec((await validation.textContent()) ?? '')?.[1]
+          expect(Number(validatedRegions)).toBeGreaterThan(0)
+          console.info(`Custom Tailcat verified: ${validatedRegions} regions validated over HTTPS`)
+
+          const choice = settings.getByRole('combobox', { name: 'Tailcat server' })
+          await expect.poll(() => choice.locator('option').count()).toBe(2)
+          await choice.selectOption({ label: 'Custom fixture' })
           expect(await runPackaged(publicClient.host, publicClient.session, titles)).toBe(showTitle)
+          await confirm('Custom fixture')
+          retryRevoked(initialPublic)
+          await expectControllerRevoked(publicClient)
+          const custom = await copyDescriptor(settings, customMap)
+          const mapHash = (text: string) => parseDescriptor(text).derpMapSha256
+          expect(mapHash(custom) !== mapHash(initialPublic)).toBe(true)
+          const customClient = await activeController(custom)
+          expect(await runPackaged(customClient.host, customClient.session, titles)).toBe(showTitle)
+          console.info('Settings route verified: Public Tailcat → custom map with different bytes')
+
+          await customRow.getByRole('button', { name: 'Edit' }).click()
+          await manager.getByLabel('Name', { exact: true }).fill('Updated fixture')
+          await mapInput.fill(unreachableMap)
+          await saveServer.click()
+          const updatedRow = manager.getByRole('listitem').filter({ hasText: 'Updated fixture' })
+          await updatedRow.waitFor()
+          await expect.poll(() => choice.locator('option:checked').textContent()).toBe('Updated fixture')
+          await status.getByText('Connected to Custom fixture', { exact: true }).waitFor()
+          expect((await copyDescriptor(settings, customMap)) === custom).toBe(true)
+          expect(await runPackaged(customClient.host, customClient.session, titles)).toBe(showTitle)
+          await connect.click()
+          await settings
+            .getByRole('dialog', { name: 'Share browser through Updated fixture' })
+            .getByRole('button', { name: 'Share browser' })
+            .click()
+          await status.getByText('Disconnected', { exact: true }).waitFor()
+          const mapError = settings.getByRole('alert')
+          await mapError.getByText('check network, TLS and permissions', { exact: false }).waitFor()
+          expect((await mapError.innerText()).includes('fixture.invalid')).toBe(false)
+          expect(await choice.locator('option:checked').textContent()).toBe('Updated fixture')
+          expect(await settings.getByRole('button', { name: 'Copy connection information' }).isVisible()).toBe(false)
+          retryRevoked(custom)
+          await expectControllerRevoked(customClient)
+          console.info(
+            'Custom Tailcat verified: live edit keeps the descriptor; failed Connect revokes it without fallback',
+          )
+
+          await updatedRow.getByRole('button', { name: 'Edit' }).click()
+          await mapInput.fill(customMap)
+          await saveServer.click()
+          await saveServer.waitFor({ state: 'hidden' })
+          await confirm('Updated fixture')
+          const updated = await copyDescriptor(settings, customMap)
+          const updatedClient = await activeController(updated)
+          expect(await runPackaged(updatedClient.host, updatedClient.session, titles)).toBe(showTitle)
+          await updatedRow.getByRole('button', { name: 'Remove' }).click()
+          await manager.getByRole('dialog').getByRole('button', { name: 'Remove server' }).click()
+          await updatedRow.waitFor({ state: 'detached' })
+          await manager.close()
+          await expect.poll(() => choice.locator('option:checked').textContent()).toBe('Public Tailcat')
+          await status.getByText('Connected to Updated fixture', { exact: true }).waitFor()
+          expect((await copyDescriptor(settings, customMap)) === updated).toBe(true)
+          expect(await runPackaged(updatedClient.host, updatedClient.session, titles)).toBe(showTitle)
+          await confirm('Public Tailcat')
+          retryRevoked(updated)
+          await expectControllerRevoked(updatedClient)
+          const first = await copyDescriptor()
+          const publicAgain = await activeController(first)
+          expect(await runPackaged(publicAgain.host, publicAgain.session, titles)).toBe(showTitle)
+          console.info(
+            'Settings route verified: removing the live custom profile preserves its grant until switching to Public Tailcat',
+          )
+
+          await route('playwriter.dev').check()
+          expect(await runPackaged(publicAgain.host, publicAgain.session, titles)).toBe(showTitle)
           await confirm('playwriter.dev')
           retryRevoked(first)
-          await expectControllerRevoked(publicClient)
+          await expectControllerRevoked(publicAgain)
           await status.getByText('1 attached tab', { exact: true }).waitFor()
           const hostedId = await copyHostedCredential(settings)
           const hostedCredential = edge ? `${edge.origin}/tunnel/${hostedId}/extension` : hostedId
@@ -804,7 +1061,7 @@ test.runIf(process.env.PLAYWRITER_TAILCAT_DELIVERY === '1')(
       await rm(directory, { recursive: true, force: true, maxRetries: 5 })
     }
   },
-  360_000,
+  480_000,
 )
 
 test('Local settings grant and revoke actual CLI access', async () => {
@@ -961,8 +1218,6 @@ test('Connect Local follows eligibility without exposing restricted targets or a
       await shared.goto(new URL('/shared', fixture.baseUrl).href)
       const restricted = await browser.newPage()
       await restricted.goto('chrome://settings')
-      const untrusted = await browser.newPage()
-      await untrusted.goto('data:text/html,<title>Untrusted fixture</title>')
       const storeUrl = 'https://chromewebstore.google.com/'
       await serviceWorker.evaluate(async (url) => {
         await chrome.tabs.create({ url })
@@ -1030,7 +1285,17 @@ test('Connect Local follows eligibility without exposing restricted targets or a
         .toBe(true)
       expect((await observer('console.log(state.exposed.length);')).stdout.trim().endsWith('[log] 0')).toBe(true)
 
-      for (const url of ['chrome://settings/', settings.url(), storeUrl, 'data:text/html,untrusted']) {
+      const data = 'data:text/html,<title>Data fixture</title>'
+      const dataPage = await browser.newPage()
+      await dataPage.goto(data)
+      await dataPage.bringToFront()
+      expect(
+        await serviceWorker.evaluate(async () => (await globalThis.toggleExtensionForActiveTab()).isConnected),
+      ).toBe(true)
+      expect((await owner(titleList)).stdout).toContain('Data fixture')
+      await dataPage.close()
+
+      for (const url of ['chrome://settings/', settings.url(), storeUrl]) {
         const denied = await observer(`await context.pages()[0].goto(${JSON.stringify(url)});`)
         expect(denied.stderr.includes('Playwriter clients cannot open')).toBe(true)
       }
@@ -1218,22 +1483,24 @@ test('a failed Local Connect stays disconnected when the relay starts until the 
 }, 120_000)
 
 test.each([
-  { scenario: 'customized Public selection', selectLegacy: true },
-  { scenario: 'no saved selection', selectLegacy: false },
+  { scenario: 'customized Public selection', selectLegacy: true, hasSavedSettings: false },
+  { scenario: 'no saved selection', selectLegacy: false, hasSavedSettings: false },
+  { scenario: 'saved connection settings', selectLegacy: false, hasSavedSettings: true },
 ])(
   'legacy migration preserves custom servers with $scenario',
-  async ({ selectLegacy }) => {
+  async ({ selectLegacy, hasSavedSettings }) => {
     await withSettings(
       async ({ settings, status, route, connect, restart }) => {
         await status.getByText('Disconnected', { exact: true }).waitFor()
-        expect(await route(selectLegacy ? 'Tailcat' : 'Local').isChecked()).toBe(true)
+        const initialRoute = hasSavedSettings ? 'playwriter.dev' : selectLegacy ? 'Tailcat' : 'Local'
+        expect(await route(initialRoute).isChecked()).toBe(true)
         if (!selectLegacy) await route('Tailcat').check()
-        const pendingServer = selectLegacy ? 'Public' : 'Public Tailcat'
+        const pendingServer = selectLegacy || hasSavedSettings ? 'Public' : 'Public Tailcat'
         const servers = settings.getByRole('combobox', { name: 'Tailcat server' })
         await servers.waitFor()
         expect(await servers.locator('option').allTextContents()).toEqual(['Public Tailcat', 'Public'])
         expect(await servers.locator('option:checked').textContent()).toBe(pendingServer)
-        await expect.poll(() => connect.isDisabled()).toBe(selectLegacy)
+        await expect.poll(() => connect.isEnabled()).toBe(true)
         await route('playwriter.dev').check()
         await expect.poll(() => route('playwriter.dev').isEnabled()).toBe(true)
 
@@ -1251,17 +1518,23 @@ test.each([
       {
         // Seed the previous release's persisted data before the first settings read.
         initializeProfile: (worker) =>
-          worker.evaluate(async (selected) => {
-            const id = 'a4a46cac-2fce-4e63-835c-fa791810ac88'
-            await chrome.storage.local.set({
-              tailcatProfiles: {
-                v: 1,
-                revision: 1,
-                selectedProfileId: selected ? id : null,
-                profiles: [{ id, name: 'Public', derpMapURL: 'https://fixture.invalid/map.json', revision: 1 }],
-              },
-            })
-          }, selectLegacy),
+          worker.evaluate(
+            async ({ selectLegacy, hasSavedSettings }) => {
+              const id = 'a4a46cac-2fce-4e63-835c-fa791810ac88'
+              await chrome.storage.local.set({
+                tailcatProfiles: {
+                  v: 1,
+                  revision: 1,
+                  selectedProfileId: selectLegacy ? id : null,
+                  profiles: [{ id, name: 'Public', derpMapURL: 'https://fixture.invalid/map.json', revision: 1 }],
+                },
+                ...(hasSavedSettings
+                  ? { playwriterConnectionSettings: { v: 1, route: 'hosted', tailcatServerId: id } }
+                  : {}),
+              })
+            },
+            { selectLegacy, hasSavedSettings },
+          ),
       },
     )
   },

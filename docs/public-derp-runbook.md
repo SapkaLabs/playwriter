@@ -65,7 +65,8 @@ node scripts/verify-tailcat-bundle.mjs
 
 Keep both explicit arguments on every operation. The foreground output includes
 the local connection ID and owned process IDs. Connected requires a real browser
-handshake and target announcement. Startup failure submits no CLI operation.
+handshake. A browser-wide connection can have zero eligible tabs and stays active
+as tabs open and close. Startup failure submits no CLI operation.
 After an operation failure, the dispatched outcome may be unknown: observe the
 fixture through a fresh manual connection before deciding whether to repeat it.
 

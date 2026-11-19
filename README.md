@@ -368,7 +368,7 @@ Also works on a LAN without traforo (`PLAYWRITER_HOST=192.168.1.10`). Full guide
 
 - **Local by default**: The normal WebSocket relay stays on `localhost:19988`. Traffic leaves your machine only when you enable Remote control or configure remote access.
 - **Origin validation**: Only our extension IDs allowed (browsers can't spoof Origin)
-- **Controlled tab scope**: Tabs are controlled after an extension click. Playwriter never opens a tab on its own. New tabs are created only when code calls `context.newPage()`.
+- **Controlled tab scope**: The extension action attaches one tab. **Connect** in Connection settings grants access to eligible tabs in regular browser windows, subject to Chrome restrictions and live CLI session ownership.
 - **Visible automation**: Chrome shows automation banner on controlled tabs
 - **No remote access**: Malicious websites cannot connect
 

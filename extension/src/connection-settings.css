@@ -178,6 +178,45 @@ dialog form {
 #copy-connection {
   margin-top: 8px;
 }
+.server-list {
+  list-style: none;
+  padding: 0;
+  border-top: 1px solid var(--border);
+}
+.server-list li,
+.server-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.server-list li {
+  justify-content: space-between;
+  padding: 10px 5px;
+  border-bottom: 1px solid var(--border);
+}
+.server-list strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+#server-form label {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+#server-form input {
+  min-height: 30px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: inherit;
+  background: Canvas;
+  font: inherit;
+}
+#validation {
+  margin-top: 8px;
+}
 :where(a, button, input, select):focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 3px;

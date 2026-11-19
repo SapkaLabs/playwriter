@@ -4,6 +4,7 @@ import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import { Stream } from 'node:stream'
 import path from 'node:path'
 import url from 'node:url'
+import { createRequire } from 'node:module'
 
 const __filename = url.fileURLToPath(import.meta.url)
 
@@ -27,8 +28,12 @@ export async function createTransport({ args = [], port }: { args?: string[]; po
     env.PLAYWRITER_PORT = String(port)
   }
   const transport = new StdioClientTransport({
-    command: 'pnpm',
-    args: ['vite-node', path.join(path.dirname(__filename), 'cli.ts'), ...args],
+    command: process.execPath,
+    args: [
+      createRequire(import.meta.url).resolve('vite-node/cli'),
+      path.join(path.dirname(__filename), 'cli.ts'),
+      ...args,
+    ],
     cwd: path.join(path.dirname(__filename), '..'),
     stderr: 'pipe',
     env,

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Playwriter public sharing</title>
+  </head>
+  <body>
+    <h1>Share browser through public DERP</h1>
+    <p>
+      Start grants control of the selected tab to anyone holding the connection information. Keep it private. Stop
+      revokes access locally.
+    </p>
+    <label
+      >Tab
+      <select id="tabs"></select
+    ></label>
+    <button id="start">Start sharing</button>
+    <button id="stop" disabled>Stop sharing</button>
+    <p role="status">stopped</p>
+    <label hidden>Connection information <textarea id="descriptor" readonly spellcheck="false"></textarea></label>
+    <button id="copy" disabled>Copy connection information</button>
+    <script type="module" src="./tailcat-tunnel/share.ts"></script>
+  </body>
+</html>

@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url'
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
-import { defineConfig } from 'vite'
+import { defineConfig, normalizePath } from 'vite'
 import { viteStaticCopy } from 'vite-plugin-static-copy'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -13,6 +13,7 @@ const __dirname = dirname(__filename)
 const playwriterPkg = JSON.parse(readFileSync(resolve(__dirname, '../playwriter/package.json'), 'utf-8'))
 
 const defineEnv: Record<string, string> = {
+  'import.meta.env.TESTING': JSON.stringify(Boolean(process.env.TESTING)),
   'process.env.PLAYWRITER_PORT': JSON.stringify(process.env.PLAYWRITER_PORT || '19988'),
   __PLAYWRITER_VERSION__: JSON.stringify(playwriterPkg.version),
   __PLAYWRITER_OPEN_WELCOME_PAGE__: JSON.stringify(process.env.PLAYWRITER_OPEN_WELCOME_PAGE !== '0'),
@@ -23,18 +24,26 @@ if (process.env.TESTING) {
 
 // Allow tests to build per-port extension outputs to avoid parallel run conflicts.
 const outDir = process.env.PLAYWRITER_EXTENSION_DIST || 'dist'
+const tailcatAssets = process.env.PLAYWRITER_TAILCAT_ASSETS
+defineEnv['__PLAYWRITER_TAILCAT_ENABLED__'] = JSON.stringify(Boolean(tailcatAssets))
 
 export default defineConfig({
   plugins: [
     viteStaticCopy({
       targets: [
+        ...(tailcatAssets
+          ? [
+              { src: normalizePath(resolve(tailcatAssets, '{main.wasm,wasm_exec.js}')), dest: 'tailcat' },
+              { src: normalizePath(resolve(tailcatAssets, 'notices')), dest: 'tailcat' },
+            ]
+          : []),
         {
-          src: resolve(__dirname, 'icons/*'),
+          src: normalizePath(resolve(__dirname, 'icons/*')),
           dest: 'icons',
         },
 
         {
-          src: resolve(__dirname, 'manifest.json'),
+          src: normalizePath(resolve(__dirname, 'manifest.json')),
           dest: '.',
           transform: (content) => {
             const manifest = JSON.parse(content)
@@ -71,6 +80,7 @@ export default defineConfig({
         offscreen: resolve(__dirname, 'src/offscreen.html'),
         welcome: resolve(__dirname, 'src/welcome.html'),
         tutorial: resolve(__dirname, 'src/tutorial.html'),
+        'tailcat-share': resolve(__dirname, 'src/tailcat-share.html'),
       },
       output: {
         entryFileNames: '[name].js',

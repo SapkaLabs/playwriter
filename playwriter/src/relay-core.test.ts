@@ -19,6 +19,7 @@ import {
   findTestPageJs,
 } from './test-utils.js'
 import './test-declarations.js'
+import type { RelayServerEvents } from './cdp-types.js'
 
 const TEST_PORT = 19987
 const SERVER_URL = `http://127.0.0.1:${TEST_PORT}`
@@ -1759,7 +1760,7 @@ describe('Relay Core Tests', () => {
       name: 'execute',
       arguments: {
         code: js`
-          await state.errorTestPage.click('#hidden-btn', { timeout: 100 });
+          await state.errorTestPage.click('#hidden-btn', { timeout: 1000 });
         `,
       },
     })
@@ -1768,7 +1769,7 @@ describe('Relay Core Tests', () => {
     const text = (result.content as any)[0].text as string
     expect(text.slice(0, text.indexOf('Call log:'))).toMatchInlineSnapshot(`
       "
-      Error executing code: page.click: Timeout 100ms exceeded. Element is not visible — it may be hidden by CSS, inside a collapsed <details>, inactive tab, or closed accordion. Try: interact with the page to reveal it first, or use { force: true } to skip visibility checks
+      Error executing code: page.click: Timeout 1000ms exceeded. Element is not visible — it may be hidden by CSS, inside a collapsed <details>, inactive tab, or closed accordion. Try: interact with the page to reveal it first, or use { force: true } to skip visibility checks
       "
     `)
     expect(text).toContain('element is not visible')
@@ -1838,7 +1839,7 @@ describe('Relay Core Tests', () => {
       name: 'execute',
       arguments: {
         code: js`
-          await state.errorTestPage.click('#covered-btn', { timeout: 100 });
+          await state.errorTestPage.click('#covered-btn', { timeout: 1000 });
         `,
       },
     })
@@ -1847,7 +1848,7 @@ describe('Relay Core Tests', () => {
     const text = (result.content as any)[0].text as string
     expect(text.slice(0, text.indexOf('Call log:'))).toMatchInlineSnapshot(`
       "
-      Error executing code: page.click: Timeout 100ms exceeded. <div id="overlay">Overlay</div> intercepts pointer events
+      Error executing code: page.click: Timeout 1000ms exceeded. <div id="overlay">Overlay</div> intercepts pointer events
       "
     `)
     expect(text).toContain('intercepts pointer events')
@@ -1939,7 +1940,7 @@ describe('Relay Core Tests', () => {
           code: js`
             state.clockA = await context.newPage()
             await state.clockA.goto('${server.baseUrl}/a')
-            state.video = await recording.start({ page: state.clockA, outputPath: '${outputPath}', clock: 'manual', frameRate: 30 })
+            state.video = await recording.start({ page: state.clockA, outputPath: ${JSON.stringify(outputPath)}, clock: 'manual', frameRate: 30 })
             await state.clockA.evaluate(() => { document.getElementById('box').style.transform = 'translateX(300px)' })
             await state.video.wait(500)
           `,
@@ -1989,8 +1990,21 @@ describe('Relay Core Tests', () => {
     await ensureConnectedTabForExecute()
     const dir = path.join(process.cwd(), 'tmp', 'recording-endings')
     fs.rmSync(dir, { recursive: true, force: true })
+    let starts=0,stream:string|undefined
+    let tail=Buffer.alloc(0),sawMoov=false,sawMoof=false
+    const observe:RelayServerEvents['cdp:response']=({command,response})=>{
+      const result=response.result as {stream?:string;data?:string;base64Encoded?:boolean}|undefined
+      if(command.method==='Page.startScreenRecording' && ++starts===2) stream=result?.stream
+      if(command.method==='IO.read' && stream && command.params?.handle===stream && result?.data) {
+        const bytes=Buffer.concat([tail,Buffer.from(result.data,result.base64Encoded?'base64':'utf8')])
+        sawMoov ||= bytes.includes(Buffer.from('moov'))
+        sawMoof ||= bytes.includes(Buffer.from('moof'))
+        tail=Buffer.from(bytes.subarray(Math.max(0,bytes.length-3)))
+      }
+    }
+    testCtx!.relayServer.on('cdp:response',observe)
     try {
-      const result = await client.callTool({
+      const setup = await client.callTool({
         name: 'execute',
         arguments: {
           code: js`
@@ -2002,7 +2016,23 @@ describe('Relay Core Tests', () => {
             state.endB = await context.newPage()
             await state.endB.setContent(spin)
             const closed = await recording.start({ page: state.endB, outputPath: 'tmp/recording-endings/closed.mp4', codec: 'av1' })
-            await new Promise((r) => setTimeout(r, 3000))
+            state.recordingEndings = {auto,closed,duplicate}
+          `,
+        },
+      })
+      expect(setup.isError).toBeFalsy()
+      // Native fragment delivery varies by browser/platform. Closing before an
+      // initialization segment and media fragment arrive cannot test retention.
+      await Promise.all([
+        new Promise(ok=>setTimeout(ok,3000)),
+        expect.poll(()=>sawMoov && sawMoof,{timeout:15_000}).toBe(true),
+      ])
+      const result = await client.callTool({
+        name:'execute',
+        arguments:{
+          code:js`
+            const {auto,closed,duplicate}=state.recordingEndings
+            delete state.recordingEndings
             const endB = state.endB
             delete state.endB
             await endB.close()
@@ -2014,7 +2044,7 @@ describe('Relay Core Tests', () => {
             return {
               duplicate,
               auto: autoResult.endReason,
-              autoRelative: autoResult.path.endsWith('tmp/recording-endings/auto.webm'),
+              autoRelative: autoResult.path.split(String.fromCharCode(92)).join('/').endsWith('tmp/recording-endings/auto.webm'),
               closed: closedResult.endReason,
               noneLeft: await recording.stop().then(() => 'stopped', (error) => error.message),
             }
@@ -2022,7 +2052,11 @@ describe('Relay Core Tests', () => {
         },
       })
       expect(result.isError).toBeFalsy()
-      const text = (result.content as Array<{ text: string }>)[0].text.replaceAll(dir, '<dir>')
+      const text = (result.content as Array<{ text: string }>)[0].text
+        .replaceAll(dir.replaceAll('\\', '\\\\'), '<dir>')
+        .replaceAll(dir, '<dir>')
+        .replaceAll('\\\\', '/')
+        .replaceAll('\\', '/')
       expect(text).toMatchInlineSnapshot(`
         "[WARNING] Recording ended without stop() (max-duration). Saved <dir>/auto.webm
         [WARNING] Recording ended without stop() (page-closed). Saved <dir>/closed.mp4
@@ -2037,9 +2071,11 @@ describe('Relay Core Tests', () => {
       const { spawnSync } = await import('node:child_process')
       for (const name of ['auto.webm', 'closed.mp4']) {
         const probe = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', path.join(dir, name)])
+        expect(probe.status, probe.stderr.toString()).toBe(0)
         expect(Number(probe.stdout.toString())).toBeGreaterThan(1.5)
       }
     } finally {
+      testCtx!.relayServer.off('cdp:response',observe)
       fs.rmSync(dir, { recursive: true, force: true })
     }
   }, 60000)

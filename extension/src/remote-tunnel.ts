@@ -17,7 +17,7 @@ import {
 export type TunnelStatus = 'connecting' | 'online' | 'error'
 
 export type TunnelConnectionHandlers = {
-  onMessage(data: string): void
+  onMessage(data: string): void | Promise<void>
   onClose(): void
 }
 

@@ -179,6 +179,9 @@ export async function startPlayWriterCDPRelayServer({
   sessionCounterFile,
   onDrained,
   extensionTimeouts,
+  stateDirectory = process.env.PLAYWRITER_STATE_DIRECTORY,
+  allowLocalExtensions = true,
+  onExecuteFailure,
 }: {
   port?: number
   host?: string
@@ -191,6 +194,12 @@ export async function startPlayWriterCDPRelayServer({
   onDrained?: () => void
   /** Timeouts for commands forwarded to the extension, in ms. Tests pass short values */
   extensionTimeouts?: Partial<typeof DEFAULT_EXTENSION_TIMEOUTS>
+  /** Dedicated controllers isolate recovery state from the user's ordinary daemon. */
+  stateDirectory?: string
+  /** Remote-only supervisors must never accept an ordinary local extension. */
+  allowLocalExtensions?: boolean
+  /** Dedicated connection supervisors dispose a failed generation; ordinary relays omit this. */
+  onExecuteFailure?: () => void
 } = {}): Promise<RelayServer> {
   const timeouts = { ...DEFAULT_EXTENSION_TIMEOUTS, ...extensionTimeouts }
   const humanInput = createHumanInput({ log: (message) => logger?.log(message) })
@@ -2002,6 +2011,7 @@ export async function startPlayWriterCDPRelayServer({
       // 2. Origin Validation: Prevent browser-based attacks (CSRF).
       // Browsers cannot spoof the Origin header, so this ensures the connection
       // is coming from our specific Chrome Extension, not a malicious website.
+      if (!allowLocalExtensions) return c.text('Local extensions are disabled on this owned relay', 403)
       const origin = c.req.header('origin')
       if (!origin || !origin.startsWith('chrome-extension://')) {
         logger?.log(
@@ -3025,7 +3035,8 @@ export async function startPlayWriterCDPRelayServer({
     try {
       const body: { sessionId: string | number; code: string; timeout?: number } = await c.req.json()
       const sessionId = normalizeSessionId(body.sessionId)
-      const { code, timeout = DEFAULT_EXEC_TIMEOUT } = body
+      const { code } = body
+      const timeout = onExecuteFailure ? Math.min(body.timeout ?? 30_000, 30_000) : body.timeout ?? DEFAULT_EXEC_TIMEOUT
 
       if (!sessionId || !code) {
         return c.json({ error: 'sessionId and code are required' }, 400)
@@ -3061,9 +3072,11 @@ export async function startPlayWriterCDPRelayServer({
       // Use the cloudTracking snapshot captured before execute (not a fresh
       // map lookup) so long-running executes that outlive idle cleanup still
       // report isCloud correctly.
+      if (result.isError) onExecuteFailure?.()
       return c.json({ ...result, isCloud: Boolean(cloudTracking) })
     } catch (error: any) {
       logger?.error('Execute endpoint error:', error)
+      onExecuteFailure?.()
       return c.json({ text: `Server error: ${error.message}`, images: [], screenshots: [], isError: true }, 500)
     } finally {
       if (!outgoing) {
@@ -3746,7 +3759,7 @@ export async function startPlayWriterCDPRelayServer({
   // if the relay process crashes. On startup, read the file and disconnect
   // any leftover VMs (best-effort).
 
-  const CLOUD_SESSIONS_FILE = path.join(os.homedir(), '.playwriter', 'cloud-sessions.json')
+  const CLOUD_SESSIONS_FILE = path.join(stateDirectory || path.join(os.homedir(), '.playwriter'), 'cloud-sessions.json')
 
   interface PersistedCloudSession {
     cloudSessionId: string

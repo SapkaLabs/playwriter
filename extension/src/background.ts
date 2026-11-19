@@ -5,6 +5,7 @@ declare const __PLAYWRITER_VERSION__: string
 // Bundled automation builds should not burn a tab on the welcome page, especially
 // in headless/VPS flows where the extension is installed only to attach to the relay.
 declare const __PLAYWRITER_OPEN_WELCOME_PAGE__: boolean
+declare const __PLAYWRITER_TAILCAT_ENABLED__: boolean
 
 import dedent from 'string-dedent'
 const js = dedent
@@ -29,6 +30,13 @@ import {
 } from 'playwriter/src/protocol'
 import { handleGhostBrowserCommand, type GhostBrowserCommandParams } from 'playwriter/src/ghost-browser'
 import { RemoteTunnel } from './remote-tunnel'
+import { TailcatTunnel } from './tailcat-tunnel/index'
+import {
+  armTailcatBarrier,
+  waitTailcatBarrier,
+  releaseTailcatBarrier,
+  tailcatBarrierStatus,
+} from './tailcat-tunnel/test-controls'
 import {
   canReattach,
   endTabSession,
@@ -194,9 +202,7 @@ async function detectBrowserName(): Promise<string> {
   const highEntropyPromise = navigatorWithUaData.userAgentData?.getHighEntropyValues?.(['fullVersionList'])
   // Keep the high-entropy lookup (it distinguishes Brave/Edge for the stable identity key),
   // but bound it so a hung call cannot stall the relay connection.
-  const highEntropyValues = highEntropyPromise
-    ? await withTimeout(highEntropyPromise, 2000, null)
-    : null
+  const highEntropyValues = highEntropyPromise ? await withTimeout(highEntropyPromise, 2000, null) : null
   const fullVersionList = highEntropyValues?.fullVersionList || []
 
   const highEntropyName = browserNameFromBrands(fullVersionList)
@@ -266,11 +272,10 @@ async function getExtensionIdentity(): Promise<ExtensionIdentity> {
     // runtime scope so we still avoid the coarse browser-only key that causes
     // cross-browser relay takeovers, and never block the connection on storage.
     const installId = await withTimeout(getInstallId(), 2000, tabSessionScope)
-    const info = await withTimeout(
-      chrome.identity.getProfileUserInfo({ accountStatus: 'ANY' }),
-      2000,
-      { email: '', id: '' } as chrome.identity.ProfileUserInfo,
-    )
+    const info = await withTimeout(chrome.identity.getProfileUserInfo({ accountStatus: 'ANY' }), 2000, {
+      email: '',
+      id: '',
+    } as chrome.identity.ProfileUserInfo)
     return {
       browser,
       email: info.email || '',
@@ -288,7 +293,6 @@ let tabGroupQueue: Promise<void> = Promise.resolve()
 // Cache Target.setAutoAttach params so existing and future tabs enable OOPIF target events.
 // This ensures Playwright can build the iframe frame tree when connecting over CDP.
 let autoAttachParams: Protocol.Target.SetAutoAttachRequest | null = null
-
 
 // ============================================================================
 // Remote control: share the browser with a remote agent through a playwriter.dev
@@ -312,7 +316,8 @@ let autoAttachParams: Protocol.Target.SetAutoAttachRequest | null = null
 // ============================================================================
 
 type RemoteTunnelRuntime = {
-  tunnel: RemoteTunnel
+  tunnel: RemoteTunnel | TailcatTunnel
+  tailcat?: boolean
   tunnelId: string
   anchorTabId: number
   /** Tabs attached because of the remote. Detached (left open) on stop. */
@@ -320,12 +325,25 @@ type RemoteTunnelRuntime = {
   status: string
 }
 let remoteTunnel: RemoteTunnelRuntime | null = null
+let tailcatLogScopes = 0
+
+// Keep inherited diagnostics from serializing browser data during a public
+// share, including commands that finish after Stop has cleared remoteTunnel.
+async function withoutTailcatLogs<T>(operation: () => Promise<T>): Promise<T> {
+  tailcatLogScopes++
+  try {
+    return await operation()
+  } finally {
+    tailcatLogScopes--
+  }
+}
+let tailcatFailure: string | null = null
 
 /**
  * A message sink for relay-bound responses: the local relay, or a tunneled relay
  * bound to the runtime that accepted it (so work can check it was not revoked).
  */
-type RelayMessageSink = { send(message: any): void; remoteRuntime?: RemoteTunnelRuntime }
+type RelayMessageSink = { send(message: any): void; remoteRuntime?: RemoteTunnelRuntime; isCurrent?(): boolean }
 /** Active relay connections arriving through the tunnel, keyed by tunnelId:connId. */
 const remoteRelayConnections = new Map<string, { send(message: any): void }>()
 
@@ -752,26 +770,27 @@ function sendLog(level: string, args: any[]) {
   })
 }
 
+function emitLog(level: 'log' | 'debug' | 'info' | 'warn' | 'error', args: any[]): void {
+  if (remoteTunnel?.tailcat || tailcatLogScopes) return
+  console[level](...args)
+  sendLog(level, args)
+}
+
 export const logger = {
   log: (...args: any[]) => {
-    console.log(...args)
-    sendLog('log', args)
+    emitLog('log', args)
   },
   debug: (...args: any[]) => {
-    console.debug(...args)
-    sendLog('debug', args)
+    emitLog('debug', args)
   },
   info: (...args: any[]) => {
-    console.info(...args)
-    sendLog('info', args)
+    emitLog('info', args)
   },
   warn: (...args: any[]) => {
-    console.warn(...args)
-    sendLog('warn', args)
+    emitLog('warn', args)
   },
   error: (...args: any[]) => {
-    console.error(...args)
-    sendLog('error', args)
+    emitLog('error', args)
   },
 }
 
@@ -837,6 +856,12 @@ export function sendMessage(message: any): void {
 // tunneled remote relay connection. Responses go back through the originating
 // sink so message ids from different relays never collide.
 async function dispatchRelayMessage(message: any, sink: RelayMessageSink): Promise<void> {
+  if (sink.isCurrent && !sink.isCurrent()) return
+  const assertActive = () => {
+    if (sink.remoteRuntime && (remoteTunnel !== sink.remoteRuntime || (sink.isCurrent && !sink.isCurrent()))) {
+      throw new Error(REMOTE_CONTROL_STOPPED_ERROR)
+    }
+  }
   // Handle ping from server - respond with pong to keep service worker alive
   if (message.method === 'ping') {
     sink.send({ method: 'pong' })
@@ -890,11 +915,13 @@ async function dispatchRelayMessage(message: any, sink: RelayMessageSink): Promi
       const groupKey = resolveTabGroupKey({ key: initialTabParams?.tabGroupKey, remote: Boolean(sink.remoteRuntime) })
       const groupColor = normalizeTabGroupColor(initialTabParams?.tabGroupColor) || undefined
       logger.debug('Creating initial tab for Playwright client, group:', groupTitle || DEFAULT_TAB_GROUP_TITLE)
-      const tab = await createTabInPreferredWindow({ url: 'about:blank', active: false })
+      assertActive()
+      const tab = await createTabInPreferredWindow({ url: 'about:blank', active: false, assertActive })
       if (tab.id) {
         const tabId = tab.id
         setTabConnecting(tabId, { groupTitle, groupKey, groupColor })
         const attach = () => {
+          assertActive()
           return attachTab(tabId, { skipAttachedEvent: true })
         }
         const { targetInfo, sessionId } = sink.remoteRuntime
@@ -929,12 +956,10 @@ async function dispatchRelayMessage(message: any, sink: RelayMessageSink): Promi
       sink.send({ id: message.id, error: 'closeTabsForKey requires a key' })
       return
     }
-    const tabIds = [...store.getState().tabs]
-      .filter(([, info]) => info.groupKey === key)
-      .map(([tabId]) => tabId)
+    const tabIds = [...store.getState().tabs].filter(([, info]) => info.groupKey === key).map(([tabId]) => tabId)
     // One call per tab: chrome.tabs.remove([...]) stops at the first id that fails, e.g. a tab
     // the user closed meanwhile, and would leave the remaining tabs open.
-    void Promise.allSettled(tabIds.map((tabId) => chrome.tabs.remove(tabId))).then((results) => {
+    return Promise.allSettled(tabIds.map((tabId) => chrome.tabs.remove(tabId))).then((results) => {
       const errors = results
         .flatMap((r) => (r.status === 'rejected' ? [String(r.reason?.message ?? r.reason)] : []))
         .filter((error) => !error.startsWith('No tab with id'))
@@ -945,7 +970,6 @@ async function dispatchRelayMessage(message: any, sink: RelayMessageSink): Promi
       const closedTabs = results.filter((r) => r.status === 'fulfilled').length
       sink.send({ id: message.id, result: { success: true, closedTabs } satisfies CloseTabsForKeyResult })
     })
-    return
   }
 
   // Update a session's tab group (rename and/or recolor): rewrite the stored
@@ -971,6 +995,7 @@ async function dispatchRelayMessage(message: any, sink: RelayMessageSink): Promi
     tabGroupQueue = tabGroupQueue
       .then(async () => {
         try {
+          assertActive()
           const params = message.params as { from?: string; to?: string; key?: string; color?: string } | undefined
           const from = normalizeTabGroupTitle(params?.from)
           const to = normalizeTabGroupTitle(params?.to)
@@ -988,13 +1013,15 @@ async function dispatchRelayMessage(message: any, sink: RelayMessageSink): Promi
           store.setState((state) => {
             const newTabs = new Map(state.tabs)
             for (const [tabId, info] of newTabs) {
-              if (!shouldUpdateTabGroupForTab({
-                currentTitle: info.groupTitle || DEFAULT_TAB_GROUP_TITLE,
-                currentKey: info.groupKey,
-                from,
-                key,
-                ownedOnly: remote,
-              })) {
+              if (
+                !shouldUpdateTabGroupForTab({
+                  currentTitle: info.groupTitle || DEFAULT_TAB_GROUP_TITLE,
+                  currentKey: info.groupKey,
+                  from,
+                  key,
+                  ownedOnly: remote,
+                })
+              ) {
                 continue
               }
               const changedTitle = isRename && info.groupTitle !== to
@@ -1067,6 +1094,7 @@ async function dispatchRelayMessage(message: any, sink: RelayMessageSink): Promi
       .catch((e) => {
         logger.debug('updateTabGroup queue error:', e)
       })
+    if (sink.remoteRuntime?.tailcat) await tabGroupQueue
     return
   }
 
@@ -1095,11 +1123,19 @@ async function dispatchRelayMessage(message: any, sink: RelayMessageSink): Promi
 
   const response: ExtensionResponseMessage = { id: message.id }
   try {
-    response.result = await handleCommand(message as ExtensionCommandMessage, { remoteRuntime: sink.remoteRuntime })
+    if (import.meta.env.TESTING && sink.remoteRuntime?.tailcat)
+      await waitTailcatBarrier('dispatch', message.params?.method)
+    assertActive()
+    response.result = await handleCommand(message as ExtensionCommandMessage, {
+      remoteRuntime: sink.remoteRuntime,
+      assertActive,
+    })
   } catch (error: any) {
     logger.debug('Error handling command:', error)
     response.error = error.message
   }
+  if (import.meta.env.TESTING && sink.remoteRuntime?.tailcat)
+    await waitTailcatBarrier('response', message.params?.method)
   sink.send(response)
 }
 
@@ -1131,17 +1167,24 @@ async function getPreferredWindowId(): Promise<number | undefined> {
   }
 }
 
-async function createTabInPreferredWindow(options: { url: string; active: boolean }): Promise<chrome.tabs.Tab> {
+async function createTabInPreferredWindow(options: {
+  url: string
+  active: boolean
+  assertActive?(): void
+}): Promise<chrome.tabs.Tab> {
   const windowId = await getPreferredWindowId()
+  if (import.meta.env.TESTING) await waitTailcatBarrier('create-tab')
   const createProperties: chrome.tabs.CreateProperties = {
     url: options.url,
     active: options.active,
     ...(windowId !== undefined ? { windowId } : {}),
   }
 
+  options.assertActive?.()
   try {
     return await chrome.tabs.create(createProperties)
   } catch (error) {
+    options.assertActive?.()
     logger.debug('Could not create tab in preferred window, falling back:', (error as Error).message)
     return await chrome.tabs.create({ url: options.url, active: options.active })
   }
@@ -1250,9 +1293,7 @@ async function syncTabGroup(): Promise<void> {
     // Groups holding tabs playwriter doesn't own are user groups the session
     // joined via title collision — never re-assert their title/color.
     const foreignGroupIds = new Set(
-      groups
-        .filter((group) => group.tabIds.some((tabId) => !ownedTabIds.has(tabId)))
-        .map((group) => group.groupId),
+      groups.filter((group) => group.tabIds.some((tabId) => !ownedTabIds.has(tabId))).map((group) => group.groupId),
     )
 
     // Group ops run BEFORE ungroups: ungrouping first can empty the keeper
@@ -1402,7 +1443,7 @@ function getTabForCommand(msg: ExtensionCommandMessage): { tabId: number; tab: T
 
 async function handleCommand(
   msg: ExtensionCommandMessage,
-  { remoteRuntime }: { remoteRuntime?: RemoteTunnelRuntime },
+  { remoteRuntime, assertActive = () => {} }: { remoteRuntime?: RemoteTunnelRuntime; assertActive?(): void },
 ): Promise<any> {
   if (msg.method !== 'forwardCDPCommand') return
 
@@ -1421,6 +1462,7 @@ async function handleCommand(
   if (targetTabId) {
     await tabReattaches.get(targetTabId)
   }
+  assertActive()
 
   const debuggee = targetTabId ? { tabId: targetTabId } : undefined
 
@@ -1440,6 +1482,7 @@ async function handleCommand(
     await Promise.all(
       connectedTabIds.map(async (tabId) => {
         try {
+          assertActive()
           await sendCommandWithTimeout({ tabId }, 'Target.setAutoAttach', params, 10000)
         } catch (error) {
           logger.debug('Failed to set auto-attach for tab:', tabId, error)
@@ -1480,6 +1523,7 @@ async function handleCommand(
       } catch (e) {
         logger.debug('Error disabling Runtime (ignoring):', e)
       }
+      assertActive()
       const result = await sendCommandWithTimeout(runtimeSession, 'Runtime.enable', msg.params.params, 10000)
       if (!runtimeSession.sessionId) {
         recordSetupCommand({ tabId: debuggee.tabId, method: 'Runtime.enable', params: msg.params.params })
@@ -1495,13 +1539,15 @@ async function handleCommand(
       const groupKey = resolveTabGroupKey({ key: msg.params.tabGroupKey, remote: Boolean(remoteRuntime) })
       const groupColor = normalizeTabGroupColor(msg.params.tabGroupColor) || undefined
       logger.debug('Creating new tab with URL:', url, 'group:', groupTitle || DEFAULT_TAB_GROUP_TITLE)
-      const tab = await createTabInPreferredWindow({ url, active: false })
+      assertActive()
+      const tab = await createTabInPreferredWindow({ url, active: false, assertActive })
       if (!tab.id) throw new Error('Failed to create tab')
       const tabId = tab.id
       setTabConnecting(tabId, { groupTitle, groupKey, groupColor })
       logger.debug('Created tab:', tabId, 'waiting for it to load...')
       await sleep(100)
       const attach = () => {
+        assertActive()
         return attachTab(tabId)
       }
       const { targetInfo } = remoteRuntime
@@ -1515,6 +1561,7 @@ async function handleCommand(
         logger.log(`Target not found: ${msg.params.params?.targetId}`)
         return { success: false } satisfies Protocol.Target.CloseTargetResponse
       }
+      assertActive()
       await chrome.tabs.remove(targetTabId)
       return { success: true } satisfies Protocol.Target.CloseTargetResponse
     }
@@ -1544,6 +1591,7 @@ async function handleCommand(
     ? resolveSetupParams({ tabId: debuggee.tabId, method, params: msg.params.params })
     : msg.params.params
   const timeout = FAST_CDP_COMMAND_TIMEOUT_MS.get(method)
+  assertActive()
   const result = timeout
     ? await sendCommandWithTimeout(debuggerSession, method, params, timeout)
     : await chrome.debugger.sendCommand(debuggerSession, method, params)
@@ -2091,11 +2139,11 @@ function syncToolbarState(tabId: number): void {
     .executeScript({
       target: { tabId, allFrames: false },
       world: 'ISOLATED',
-      func: (recording: boolean, remoteActive: boolean) => {
+      func: (recording: boolean, remoteActive: boolean, tailcat: boolean) => {
         window.__playwriterToolbarSetRecording?.(recording)
-        window.__playwriterToolbarSetRemote?.(remoteActive)
+        window.__playwriterToolbarSetRemote?.(remoteActive, tailcat)
       },
-      args: [recorderActive, remoteTunnel !== null],
+      args: [recorderActive, remoteTunnel !== null, Boolean(remoteTunnel?.tailcat)],
     })
     .catch(() => {})
 }
@@ -2132,10 +2180,10 @@ function setRemoteStateInAllTabs(active: boolean): void {
       .executeScript({
         target: { tabId, allFrames: false },
         world: 'ISOLATED',
-        func: (on: boolean) => {
-          window.__playwriterToolbarSetRemote?.(on)
+        func: (on: boolean, tailcat: boolean) => {
+          window.__playwriterToolbarSetRemote?.(on, tailcat)
         },
-        args: [active],
+        args: [active, Boolean(remoteTunnel?.tailcat)],
       })
       .catch(() => {})
   }
@@ -2329,13 +2377,14 @@ const REMOTE_TUNNEL_STORAGE_KEY = 'playwriterRemoteTunnel'
 type PersistedRemoteTunnel = { anchorTabId: number; tunnelId: string; remoteTabIds: number[] }
 
 function persistRemoteTunnel(): void {
-  const entry: PersistedRemoteTunnel | null = remoteTunnel
-    ? {
-        anchorTabId: remoteTunnel.anchorTabId,
-        tunnelId: remoteTunnel.tunnelId,
-        remoteTabIds: Array.from(remoteTunnel.remoteTabIds),
-      }
-    : null
+  const entry: PersistedRemoteTunnel | null =
+    remoteTunnel && !remoteTunnel.tailcat
+      ? {
+          anchorTabId: remoteTunnel.anchorTabId,
+          tunnelId: remoteTunnel.tunnelId,
+          remoteTabIds: Array.from(remoteTunnel.remoteTabIds),
+        }
+      : null
   void chrome.storage.session.set({ [REMOTE_TUNNEL_STORAGE_KEY]: entry }).catch(() => {})
 }
 
@@ -2359,7 +2408,6 @@ async function attachForRemote<T>({
   attach: () => Promise<T>
 }): Promise<T> {
   if (remoteTunnel !== runtime) {
-    detachTab(tabId, true)
     throw new Error(REMOTE_CONTROL_STOPPED_ERROR)
   }
   if (!runtime.remoteTabIds.has(tabId)) {
@@ -2368,7 +2416,7 @@ async function attachForRemote<T>({
   }
   const result = await attach()
   if (remoteTunnel !== runtime) {
-    detachTab(tabId, true)
+    if (!remoteTunnel || !isRemoteOwnedTab({ runtime: remoteTunnel, tabId })) detachTab(tabId, true)
     throw new Error(REMOTE_CONTROL_STOPPED_ERROR)
   }
   return result
@@ -2494,7 +2542,7 @@ async function sendRemoteHelloAndTargets(conn: { send(message: any): void }): Pr
 
 async function startRemoteControl(
   anchorTabId: number,
-  options: { tunnelId?: string; remoteTabIds?: number[] } = {},
+  options: { tunnelId?: string; remoteTabIds?: number[]; tailcat?: boolean } = {},
 ): Promise<{ url: string; started: boolean; id: string }> {
   if (remoteTunnel) {
     setRemoteStateInAllTabs(true)
@@ -2502,20 +2550,36 @@ async function startRemoteControl(
   }
 
   const tunnelId = options.tunnelId || generateTunnelId()
-  const tunnel = new RemoteTunnel({
+  const Tunnel = options.tailcat ? TailcatTunnel : RemoteTunnel
+  const tunnel = new Tunnel({
+    ensureOffscreen: ensureOffscreenDocument,
+    onFatal: (reason: string) => {
+      if (remoteTunnel?.tunnel === tunnel) {
+        stopRemoteControl()
+        tailcatFailure = reason
+      }
+    },
     tunnelId,
     baseDomain: REMOTE_TUNNEL_BASE_DOMAIN,
     logger,
     onStatusChange: (status, detail) => {
       if (remoteTunnel?.tunnel === tunnel) {
-        remoteTunnel.status = status
+        remoteTunnel.status = options.tailcat
+          ? status === 'online'
+            ? 'ready'
+            : status === 'error'
+              ? 'disconnected'
+              : 'starting'
+          : status
       }
       logger.debug('Remote tunnel status:', status, detail || '')
     },
     onConnectionOpen: (virtualConn) => {
+      let active = true
       const connKey = `${tunnelId}:${virtualConn.id}`
       const conn = {
         send: (message: any) => {
+          if (!active || remoteTunnel !== runtime) return
           const isScreencastFrame =
             message?.method === 'forwardCDPEvent' && message.params?.method === 'Page.screencastFrame'
           if (isScreencastFrame && !virtualConn.canSendScreencastFrame()) {
@@ -2526,6 +2590,10 @@ async function startRemoteControl(
       }
       remoteRelayConnections.set(connKey, conn)
       void sendRemoteHelloAndTargets(conn)
+        .then(() => {
+          if (active && remoteTunnel === runtime && runtime.tailcat) runtime.status = 'connected'
+        })
+        .catch(() => virtualConn.close())
       return {
         onMessage: (data) => {
           let parsed: any
@@ -2534,32 +2602,54 @@ async function startRemoteControl(
           } catch {
             return
           }
-          void dispatchRelayMessage(parsed, { send: conn.send, remoteRuntime: runtime })
+          const dispatch = () =>
+            dispatchRelayMessage(parsed, {
+              send: conn.send,
+              remoteRuntime: runtime,
+              isCurrent: () => active && remoteTunnel === runtime,
+            }).catch(() => virtualConn.close())
+          return runtime.tailcat ? withoutTailcatLogs(dispatch) : dispatch()
         },
         onClose: () => {
+          active = false
           remoteRelayConnections.delete(connKey)
         },
       }
     },
   })
 
-  const runtime: RemoteTunnelRuntime = { tunnel, tunnelId, anchorTabId, remoteTabIds: new Set(), status: 'connecting' }
+  const runtime: RemoteTunnelRuntime = {
+    tunnel,
+    tunnelId,
+    anchorTabId,
+    remoteTabIds: new Set(),
+    status: options.tailcat ? 'starting' : 'connecting',
+    tailcat: options.tailcat,
+  }
   // Set before attaching so the maintain loop and relay-close handling keep
   // these tabs 'connected' without a local relay: the tunnel is the consumer.
   remoteTunnel = runtime
+  if (runtime.tailcat) tailcatFailure = null
+  updateSharingMenus()
   // The tunnel is the consumer, so the anchor attaches even without a local relay.
   if (store.getState().tabs.get(anchorTabId)?.state !== 'connected') {
     try {
       setTabConnecting(anchorTabId)
+      if (import.meta.env.TESTING) await waitTailcatBarrier('anchor-attach')
+      if (remoteTunnel !== runtime) throw new Error(REMOTE_CONTROL_STOPPED_ERROR)
       await attachTab(anchorTabId)
     } catch (error) {
-      stopRemoteControl()
-      detachTab(anchorTabId, true)
+      if (remoteTunnel === runtime) stopRemoteControl()
+      if (!remoteTunnel || !isRemoteOwnedTab({ runtime: remoteTunnel, tabId: anchorTabId })) {
+        detachTab(anchorTabId, true)
+      }
       throw error
     }
     // Stopped while attaching (anchor closed, debugger banner cancelled): undo our attach.
     if (remoteTunnel !== runtime) {
-      detachTab(anchorTabId, true)
+      if (!remoteTunnel || !isRemoteOwnedTab({ runtime: remoteTunnel, tabId: anchorTabId })) {
+        detachTab(anchorTabId, true)
+      }
       throw new Error(REMOTE_CONTROL_STOPPED_ERROR)
     }
   }
@@ -2607,8 +2697,9 @@ function stopRemoteControl(): boolean {
   if (runtime === null) {
     return false
   }
-  setRemoteStateInAllTabs(false)
   remoteTunnel = null
+  if (runtime.tailcat) tailcatFailure = null
+  setRemoteStateInAllTabs(false)
   updateSharingMenus()
   runtime.tunnel.close()
   persistRemoteTunnel()
@@ -2931,16 +3022,18 @@ chrome.debugger.onEvent.addListener(onDebuggerEvent)
 chrome.debugger.onDetach.addListener(onDebuggerDetach)
 
 // resetDebugger detaches everything, so remote tabs must be restored after it.
-void resetDebugger().then(() => {
-  return restoreRemoteTunnelAfterRestart()
-}).finally(() => {
-  // Startup sync: clean leftover managed groups from a previous SW/browser
-  // session (Chrome session restore can bring groups back while nothing is
-  // connected). Runs after remote tabs restore so restored tabs stay grouped.
-  tabGroupQueue = tabGroupQueue.then(syncTabGroup).catch((e) => {
-    logger.debug('startup syncTabGroup error:', e)
+void resetDebugger()
+  .then(() => {
+    return restoreRemoteTunnelAfterRestart()
   })
-})
+  .finally(() => {
+    // Startup sync: clean leftover managed groups from a previous SW/browser
+    // session (Chrome session restore can bring groups back while nothing is
+    // connected). Runs after remote tabs restore so restored tabs stay grouped.
+    tabGroupQueue = tabGroupQueue.then(syncTabGroup).catch((e) => {
+      logger.debug('startup syncTabGroup error:', e)
+    })
+  })
 void connectionManager.maintainLoop()
 
 // ============================================================================
@@ -2972,6 +3065,7 @@ const MENU = {
   copyRemotePrompt: 'playwriter-copy-remote-prompt',
   copyRemoteId: 'playwriter-copy-remote-id',
   stopSharing: 'playwriter-stop-sharing',
+  publicSharing: 'playwriter-public-sharing',
 } as const
 
 const PAGE_MENU_CONTEXTS: chrome.contextMenus.CreateProperties['contexts'] = [
@@ -2991,6 +3085,12 @@ const SHARED_MENU_CONTEXTS: chrome.contextMenus.CreateProperties['contexts'] = [
 // Menus survive service-worker restarts, so recreate them from scratch.
 // Updates wait for this, or they fail with "Cannot find menu item".
 const menusReady: Promise<void> = chrome.contextMenus.removeAll().then(() => {
+  if (__PLAYWRITER_TAILCAT_ENABLED__)
+    chrome.contextMenus.create({
+      id: MENU.publicSharing,
+      title: 'Share browser: open public DERP controls',
+      contexts: SHARED_MENU_CONTEXTS,
+    })
   chrome.contextMenus.create({
     id: MENU.pinElement,
     title: 'Copy Playwriter Locator for this element',
@@ -3051,10 +3151,19 @@ function updateContextMenuVisibility(): void {
 
 function updateSharingMenus(): void {
   const sharing = remoteTunnel !== null
+  const tailcat = Boolean(remoteTunnel?.tailcat)
   updateMenus([
     [MENU.separator, { visible: sharing }],
-    [MENU.copyRemotePrompt, { visible: sharing }],
-    [MENU.copyRemoteId, { visible: sharing }],
+    [MENU.copyRemotePrompt, { visible: sharing && !tailcat }],
+    [
+      MENU.copyRemoteId,
+      {
+        visible: sharing,
+        title: tailcat
+          ? 'Copy connection information for public DERP'
+          : 'Copy remote id (secret, gives full browser access)',
+      },
+    ],
     [MENU.stopSharing, { visible: sharing }],
   ])
 }
@@ -3152,7 +3261,10 @@ async function pinMarkedElement(options: { tabId: number; marker: string; flash:
 
 // Right-click "Copy Playwriter Locator" works on any tab: pin the element, copy
 // the inspect command, and attach the tab so the agent can run that command.
-async function copyElementLocator(options: { info: chrome.contextMenus.OnClickData; tab: chrome.tabs.Tab }): Promise<void> {
+async function copyElementLocator(options: {
+  info: chrome.contextMenus.OnClickData
+  tab: chrome.tabs.Tab
+}): Promise<void> {
   const { info, tab } = options
   if (!tab.id) {
     return
@@ -3263,10 +3375,21 @@ async function copyRemoteText(options: { tabId: number; kind: 'prompt' | 'id' })
     await toastTab(options.tabId, 'Remote control is not active')
     return
   }
-  const text = options.kind === 'prompt' ? buildRemoteControlPrompt({ id: runtime.tunnelId }) : runtime.tunnelId
+  const text = runtime.tailcat
+    ? runtime.tunnel.url
+    : options.kind === 'prompt'
+      ? buildRemoteControlPrompt({ id: runtime.tunnelId })
+      : runtime.tunnelId
+  if (!text) {
+    await toastTab(options.tabId, 'Sharing is starting')
+    return
+  }
   try {
     await copyTextInOffscreenDocument(text)
-    await toastTab(options.tabId, options.kind === 'prompt' ? 'Copied prompt' : 'Copied id')
+    await toastTab(
+      options.tabId,
+      runtime.tailcat ? 'Copied connection information' : options.kind === 'prompt' ? 'Copied prompt' : 'Copied id',
+    )
   } catch (error) {
     logger.error('Remote control copy failed:', error)
     await toastTab(options.tabId, `Copy failed: ${(error as Error).message}`)
@@ -3616,7 +3739,8 @@ chrome.windows.onCreated.addListener(async (popupWindow) => {
     // Popups join the opener tab's group so session tabs stay together
     const sourceTabInfo = connectedTabs.get(sourceTabId)
     // Popups of remote-owned tabs are remote work: Stop sharing detaches them.
-    const runtime = remoteTunnel && isRemoteOwnedTab({ runtime: remoteTunnel, tabId: sourceTabId }) ? remoteTunnel : null
+    const runtime =
+      remoteTunnel && isRemoteOwnedTab({ runtime: remoteTunnel, tabId: sourceTabId }) ? remoteTunnel : null
     for (const tabId of tabIds) {
       if (connectedTabs.has(tabId)) continue
       const attach = () => {
@@ -3637,8 +3761,19 @@ chrome.windows.onCreated.addListener(async (popupWindow) => {
   }
 })
 
-async function runMenuAction(info: chrome.contextMenus.OnClickData, tab: chrome.tabs.Tab): Promise<void> {
-  if (!tab.id) {
+async function runMenuAction(info: chrome.contextMenus.OnClickData, tab?: chrome.tabs.Tab): Promise<void> {
+  // Revocation must be processed even without a usable page/tab/toolbar.
+  if (info.menuItemId === MENU.stopSharing) {
+    stopRemoteControl()
+    return
+  }
+  if (info.menuItemId === MENU.publicSharing) {
+    await chrome.tabs.create({
+      url: chrome.runtime.getURL('src/tailcat-share.html') + (tab?.id ? `?tab=${tab.id}` : ''),
+    })
+    return
+  }
+  if (!tab?.id) {
     return
   }
   const tabId = tab.id
@@ -3663,9 +3798,7 @@ async function runMenuAction(info: chrome.contextMenus.OnClickData, tab: chrome.
 }
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
-  if (tab) {
-    void runMenuAction(info, tab)
-  }
+  void runMenuAction(info, tab)
 })
 
 // Tests cannot click native Chrome menus, so they call the same handler directly.
@@ -3677,7 +3810,10 @@ async function runMenuItemForActiveTab(menuItemId: string): Promise<void> {
   await runMenuAction({ menuItemId, frameId: 0, editable: false, pageUrl: tab.url || '' }, tab)
 }
 
-async function copyReactSource(options: { info: chrome.contextMenus.OnClickData; tab: chrome.tabs.Tab }): Promise<void> {
+async function copyReactSource(options: {
+  info: chrome.contextMenus.OnClickData
+  tab: chrome.tabs.Tab
+}): Promise<void> {
   const { info, tab } = options
   if (!tab.id || store.getState().tabs.get(tab.id)?.state !== 'connected') {
     return
@@ -3810,8 +3946,12 @@ async function ensureOffscreenDocument(): Promise<void> {
   }
   offscreenDocumentCreating = chrome.offscreen.createDocument({
     url: 'src/offscreen.html',
-    reasons: [chrome.offscreen.Reason.CLIPBOARD, chrome.offscreen.Reason.AUDIO_PLAYBACK],
-    justification: 'Copy prompts to the clipboard and play menu action sounds',
+    reasons: [
+      chrome.offscreen.Reason.CLIPBOARD,
+      chrome.offscreen.Reason.AUDIO_PLAYBACK,
+      chrome.offscreen.Reason.WORKERS,
+    ],
+    justification: 'Own the sharing transport worker, clipboard and menu sounds',
   })
   try {
     await offscreenDocumentCreating
@@ -3860,6 +4000,89 @@ function playSound(sound: SoundName): void {
 
 // Handle messages from the in-page toolbar
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (typeof message.action === 'string' && message.action.startsWith('tailcat')) {
+    if (
+      sender.id !== chrome.runtime.id ||
+      sender.url?.split('?')[0] !== chrome.runtime.getURL('src/tailcat-share.html')
+    )
+      return false
+    if (import.meta.env.TESTING && message.action === 'tailcatTest') {
+      try {
+        if (message.command === 'barrierArm') {
+          armTailcatBarrier(message.name, message.method)
+          sendResponse({ armed: true })
+          return false
+        }
+        if (message.command === 'barrierRelease') {
+          releaseTailcatBarrier(message.name)
+          sendResponse({ released: true })
+          return false
+        }
+        if (message.command === 'barrierStatus') {
+          sendResponse(tailcatBarrierStatus(message.name))
+          return false
+        }
+      } catch {
+        sendResponse({ error: 'Invalid test barrier' })
+        return false
+      }
+    }
+    if (message.action === 'tailcatStop') {
+      if (remoteTunnel?.tailcat) stopRemoteControl()
+      sendResponse({})
+      return false
+    }
+    if (message.action === 'tailcatStatus') {
+      sendResponse({
+        status: !__PLAYWRITER_TAILCAT_ENABLED__
+          ? 'unavailable'
+          : remoteTunnel?.tailcat
+            ? remoteTunnel.status
+            : remoteTunnel
+              ? 'another share is active'
+              : 'stopped',
+        active: Boolean(remoteTunnel?.tailcat),
+        error: !__PLAYWRITER_TAILCAT_ENABLED__ ? 'Public DERP assets are not included in this build' : tailcatFailure,
+        descriptor: remoteTunnel?.tailcat ? remoteTunnel.tunnel.url : '',
+      })
+      return false
+    }
+    if (import.meta.env.TESTING && message.action === 'tailcatTest' && remoteTunnel?.tunnel instanceof TailcatTunnel) {
+      const tunnel = remoteTunnel.tunnel
+      if (message.command === 'trace') {
+        sendResponse(tunnel.trace)
+        return false
+      }
+      void tunnel
+        .test(message.command, { cut: message.cut })
+        .then(sendResponse, () => sendResponse({ error: 'Test control failed' }))
+      return true
+    }
+    if (message.action === 'tailcatCopy') {
+      const text = remoteTunnel?.tailcat && remoteTunnel.status !== 'starting' ? remoteTunnel.tunnel.url : ''
+      void (text ? copyTextInOffscreenDocument(text) : Promise.reject(new Error('Share is not ready'))).then(
+        () => sendResponse({}),
+        () => sendResponse({ error: 'Copy failed' }),
+      )
+      return true
+    }
+    if (message.action === 'tailcatStart') {
+      if (!__PLAYWRITER_TAILCAT_ENABLED__) {
+        sendResponse({ error: 'Public DERP assets are not included in this build' })
+        return false
+      }
+      if (remoteTunnel || !Number.isSafeInteger(message.tabId)) {
+        sendResponse({ error: 'Sharing is already active or no tab is selected' })
+        return false
+      }
+      void withoutTailcatLogs(() => startRemoteControl(message.tabId, { tailcat: true })).then(
+        () => sendResponse({}),
+        () => sendResponse({ error: 'Start failed; sharing stopped' }),
+      )
+      return true
+    }
+    return false
+  }
   // Sent by the toolbar after its in-page confirm dialog.
   if (message.action === 'remoteControlStart') {
     const tabId = getToolbarSenderTabId(sender)

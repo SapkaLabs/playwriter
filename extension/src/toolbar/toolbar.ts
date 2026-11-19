@@ -14,7 +14,7 @@ declare global {
     __playwriterToolbarSetRecording?: (recording: boolean) => void
     __playwriterToolbarStopRecording?: (() => void) | null
     __playwriterToolbarStartRecording?: (() => void) | null
-    __playwriterToolbarSetRemote?: (active: boolean) => void
+    __playwriterToolbarSetRemote?: (active: boolean, tailcat?: boolean) => void
     __playwriterToolbarStartRemote?: (() => void) | null
     __playwriterToolbarStopRemote?: (() => void) | null
     __playwriterToolbarShowToast?: (msg: string) => void
@@ -46,8 +46,7 @@ export function initPlaywriterToolbar(): void {
   // Shift-click multi-select: accumulated pins while pin mode stays active.
   // Each entry tracks the pin number and element so we can build a combined
   // clipboard string and clear persistent outlines when pin mode exits.
-  let accumulatedPins: { n: number; element: Element; prevOutline: string; prevOffset: string }[] =
-    []
+  let accumulatedPins: { n: number; element: Element; prevOutline: string; prevOffset: string }[] = []
 
   // ── Create shadow-DOM host ─────────────────────────────────────────────────
 
@@ -57,8 +56,7 @@ export function initPlaywriterToolbar(): void {
   // Fixed at the top center, flush with the viewport edge, in both states.
   // pointer-events:none on the host so the shadow-DOM children (pointer-events:all)
   // control interactivity without the host element itself blocking page events.
-  host.style.cssText =
-    `all:initial;position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:2147483647;pointer-events:none;opacity:1;visibility:visible;display:block;filter:none;font-size:0;line-height:0;contain:layout style;`
+  host.style.cssText = `all:initial;position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:2147483647;pointer-events:none;opacity:1;visibility:visible;display:block;filter:none;font-size:0;line-height:0;contain:layout style;`
 
   // Closed shadow root: page scripts cannot access our toolbar DOM
   const shadow = host.attachShadow({ mode: 'closed' })
@@ -420,9 +418,7 @@ export function initPlaywriterToolbar(): void {
 
     const GAP = 10
     const bar = host.getBoundingClientRect()
-    const x = anchor
-      ? Math.max(8, Math.min(anchor.clientX, window.innerWidth - 8))
-      : bar.left + bar.width / 2
+    const x = anchor ? Math.max(8, Math.min(anchor.clientX, window.innerWidth - 8)) : bar.left + bar.width / 2
     const belowY = anchor ? anchor.rect.bottom + GAP : bar.bottom + GAP
     const aboveY = anchor ? anchor.rect.top - GAP : bar.top - GAP
     const fitsBelow = belowY + 36 < window.innerHeight
@@ -810,15 +806,41 @@ export function initPlaywriterToolbar(): void {
       masterGain: 0.38,
       layers: [
         { kind: 'tone', waveform: 'sine', frequency: 1400, attack: 0.002, decay: 0.04, peak: 0.05 },
-        { kind: 'noise', filterType: 'highpass', filterFreq: 3000, filterQ: 0.5, attack: 0.001, decay: 0.025, peak: 0.018 },
+        {
+          kind: 'noise',
+          filterType: 'highpass',
+          filterFreq: 3000,
+          filterQ: 0.5,
+          attack: 0.001,
+          decay: 0.025,
+          peak: 0.018,
+        },
       ],
     },
     // Lock-on sweep that resolves (recording started)
     record: {
       masterGain: 0.48,
       layers: [
-        { kind: 'noise', filterType: 'bandpass', filterFreq: 3600, filterQ: 1.8, attack: 0.001, decay: 0.02, peak: 0.11 },
-        { kind: 'tone', waveform: 'triangle', frequency: 330, glideTo: 660, glideTime: 0.12, offset: 0.012, attack: 0.004, decay: 0.16, peak: 0.055 },
+        {
+          kind: 'noise',
+          filterType: 'bandpass',
+          filterFreq: 3600,
+          filterQ: 1.8,
+          attack: 0.001,
+          decay: 0.02,
+          peak: 0.11,
+        },
+        {
+          kind: 'tone',
+          waveform: 'triangle',
+          frequency: 330,
+          glideTo: 660,
+          glideTime: 0.12,
+          offset: 0.012,
+          attack: 0.004,
+          decay: 0.16,
+          peak: 0.055,
+        },
         { kind: 'tone', waveform: 'sine', frequency: 990, offset: 0.13, attack: 0.004, decay: 0.22, peak: 0.06 },
       ],
       shimmer: { delay: 0.1, feedback: 0.16, wet: 0.1, lowpass: 4200 },
@@ -899,9 +921,12 @@ export function initPlaywriterToolbar(): void {
       if (ctx.state === 'running') {
         renderSoundRecipe(ctx, recipe)
       } else {
-        void ctx.resume().then(() => {
-          if (ctx.state === 'running') renderSoundRecipe(ctx, recipe)
-        }).catch(() => {})
+        void ctx
+          .resume()
+          .then(() => {
+            if (ctx.state === 'running') renderSoundRecipe(ctx, recipe)
+          })
+          .catch(() => {})
       }
     } catch {}
   }
@@ -1105,7 +1130,9 @@ export function initPlaywriterToolbar(): void {
   }
   updateRemoteBtn()
 
-  function setRemote(active: boolean): void {
+  function setRemote(active: boolean, tailcat = false): void {
+    copyPromptItem.hidden = tailcat
+    copyIdItem.innerHTML = HASH_SVG + (tailcat ? ' <span>Copy connection information</span>' : ' <span>Copy id</span>')
     remoteActive = active
     hideRemotePanels()
     updateRemoteBtn()

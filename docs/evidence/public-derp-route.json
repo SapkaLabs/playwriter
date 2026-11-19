@@ -1,0 +1,6740 @@
+{
+  "at": "2026-11-16T18:32:37.637Z",
+  "sourceCommit": "938e19f85fac95c0545bd60a0847765beb0672af",
+  "browser": "157.0.4341.46",
+  "extensionVersion": "0.0.179",
+  "endpoints": {
+    "B": 19987,
+    "R": 60080,
+    "A": 60079,
+    "F": 56051
+  },
+  "connection": "dbb8f4cbcc4a9322565a712306dc793d",
+  "session": "1",
+  "extensionId": "remote:32658bc163159ff24806a69970e0bdb72f4606172ef9f0c67559dbdddd35eb92",
+  "processIds": {
+    "native": 54516,
+    "relay": 64332,
+    "adapter": 76320
+  },
+  "operationTimings": [
+    {
+      "operation": 1,
+      "ms": 4525.096999999998,
+      "completed": true
+    },
+    {
+      "operation": 2,
+      "ms": 11411.881100000002,
+      "completed": true
+    },
+    {
+      "operation": 3,
+      "ms": 2512.1119000000035,
+      "completed": true
+    },
+    {
+      "operation": 4,
+      "ms": 6270.175000000003,
+      "completed": true
+    },
+    {
+      "operation": 5,
+      "ms": 1091.0181999999986,
+      "completed": true
+    },
+    {
+      "operation": 6,
+      "ms": 5398.301200000002,
+      "completed": true
+    },
+    {
+      "operation": 7,
+      "ms": 7530.250999999997,
+      "completed": true
+    },
+    {
+      "operation": 8,
+      "ms": 375.27240000000165,
+      "completed": true
+    },
+    {
+      "operation": 9,
+      "ms": 6516.006699999998,
+      "completed": true
+    },
+    {
+      "operation": 10,
+      "ms": 7215.912500000006,
+      "completed": true
+    },
+    {
+      "operation": 11,
+      "ms": 6765.1927,
+      "completed": true
+    },
+    {
+      "operation": 12,
+      "ms": 7971.1600000000035,
+      "completed": true
+    },
+    {
+      "operation": 13,
+      "ms": 1467.5652999999875,
+      "completed": true
+    }
+  ],
+  "nativeSockets": [
+    {
+      "RemoteAddress": "208.111.39.38",
+      "RemotePort": 443
+    },
+    {
+      "RemoteAddress": "44.199.162.229",
+      "RemotePort": 443
+    }
+  ],
+  "ordinaryUpgradeProbes": "B=403,R=403",
+  "allEstablishedSocketsClosed": [
+    1
+  ],
+  "correlatedCommandFrames": 39,
+  "controllerTrace": [
+    {
+      "stage": "native-child-read",
+      "at": 1794853909582,
+      "bytes": 389
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853909582,
+      "bytes": 389
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853909582,
+      "direction": "read",
+      "bytes": 385,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Runtime.consoleAPICalled"
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853909582
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853909753,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853909754,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853909754
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853909754,
+      "bytes": 62
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853909754,
+      "bytes": 62
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853909754,
+      "direction": "read",
+      "bytes": 62,
+      "id": 190
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853909755
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853909756,
+      "direction": "write",
+      "bytes": 236,
+      "id": 192,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Page.createIsolatedWorld"
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853909859,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853909860,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853909860
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853909860,
+      "bytes": 63
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853909860,
+      "bytes": 63
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853909860,
+      "direction": "read",
+      "bytes": 63,
+      "id": 191
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853909860
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853909861,
+      "direction": "write",
+      "bytes": 169,
+      "id": 193,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.releaseObject"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853909861,
+      "direction": "write",
+      "bytes": 109,
+      "id": 194,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Page.enable"
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853910099,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853910099,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853910099
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853910100,
+      "bytes": 44
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853910100,
+      "bytes": 44
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853910100,
+      "direction": "read",
+      "bytes": 44,
+      "id": 192
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853910100
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853910101,
+      "direction": "write",
+      "bytes": 377,
+      "id": 195,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.evaluate"
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853910175,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853910175,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853910175
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853910175,
+      "bytes": 161
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853910175,
+      "bytes": 161
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853910175,
+      "direction": "read",
+      "bytes": 161,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "DOM.attributeRemoved"
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853910175
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853910175,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853910176,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853910176
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853910176,
+      "bytes": 162
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853910176,
+      "bytes": 162
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853910176,
+      "direction": "read",
+      "bytes": 162,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "DOM.attributeRemoved"
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853910176
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853910204,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853910204,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853910204
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853910205,
+      "bytes": 22
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853910205,
+      "bytes": 22
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853910205,
+      "direction": "read",
+      "bytes": 22,
+      "id": 193
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853910205
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853910205,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853910205,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853910205
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853910206,
+      "bytes": 22
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853910206,
+      "bytes": 22
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853910206,
+      "direction": "read",
+      "bytes": 22,
+      "id": 194
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853910206
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853910207,
+      "direction": "write",
+      "bytes": 169,
+      "id": 196,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.releaseObject"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853910208,
+      "direction": "write",
+      "bytes": 154,
+      "id": 197,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Network.getResponseBody"
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853910445,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853910445,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853910445
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853910445,
+      "bytes": 62
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853910446,
+      "bytes": 62
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853910446,
+      "direction": "read",
+      "bytes": 62,
+      "id": 195
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853910446
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853910551,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853910551,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853910551
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853910552,
+      "bytes": 22
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853910552,
+      "bytes": 22
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853910552,
+      "direction": "read",
+      "bytes": 22,
+      "id": 196
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853910552
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853910552,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853910552,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853910552
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853910553,
+      "bytes": 103
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853910553,
+      "bytes": 103
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853910553,
+      "direction": "read",
+      "bytes": 103,
+      "id": 197
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853910553
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853910555,
+      "direction": "write",
+      "bytes": 159,
+      "id": 198,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Emulation.setFocusEmulationEnabled"
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853910898,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853910898,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853910898
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853910898,
+      "bytes": 22
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853910898,
+      "bytes": 22
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853910899,
+      "direction": "read",
+      "bytes": 22,
+      "id": 198
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853910899
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853910958,
+      "direction": "write",
+      "bytes": 158,
+      "id": 199,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Emulation.setFocusEmulationEnabled"
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853911305,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853911305,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853911305
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853911305,
+      "bytes": 22
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853911305,
+      "bytes": 22
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853911305,
+      "direction": "read",
+      "bytes": 22,
+      "id": 199
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853911305
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853911306,
+      "direction": "write",
+      "bytes": 2818,
+      "id": 200,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.callFunctionOn"
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853911664,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853911664,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853911664
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853911664,
+      "bytes": 131
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853911664,
+      "bytes": 131
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853911664,
+      "direction": "read",
+      "bytes": 131,
+      "id": 200
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853911664
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853911667,
+      "direction": "write",
+      "bytes": 564,
+      "id": 201,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.callFunctionOn"
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853912012,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853912012,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853912013
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853912013,
+      "bytes": 344
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853912013,
+      "bytes": 344
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853912013,
+      "direction": "read",
+      "bytes": 344,
+      "id": 201
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853912014
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853912018,
+      "direction": "write",
+      "bytes": 527,
+      "id": 202,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.callFunctionOn"
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853912362,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853912362,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853912362
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853912362,
+      "bytes": 154
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853912362,
+      "bytes": 154
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853912362,
+      "direction": "read",
+      "bytes": 154,
+      "id": 202
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853912363
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853912364,
+      "direction": "write",
+      "bytes": 595,
+      "id": 203,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.callFunctionOn"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853912364,
+      "direction": "write",
+      "bytes": 169,
+      "id": 204,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.releaseObject"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853912364,
+      "direction": "write",
+      "bytes": 857,
+      "id": 205,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.callFunctionOn"
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853912707,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853912707,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853912707
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853912707,
+      "bytes": 106
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853912707,
+      "bytes": 106
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853912707,
+      "direction": "read",
+      "bytes": 106,
+      "id": 203
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853912708
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853912708,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853912708,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853912708
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853912709,
+      "bytes": 22
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853912709,
+      "bytes": 22
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853912709,
+      "direction": "read",
+      "bytes": 22,
+      "id": 204
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853912709
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853913818,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853913818,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853913818
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853913818,
+      "bytes": 51
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853913818,
+      "bytes": 51
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853913818,
+      "direction": "read",
+      "bytes": 51,
+      "id": 205
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853913818
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853913819,
+      "direction": "write",
+      "bytes": 174,
+      "id": 206,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "DOM.scrollIntoViewIfNeeded"
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853914162,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853914162,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853914162
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853914163,
+      "bytes": 22
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853914163,
+      "bytes": 22
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853914163,
+      "direction": "read",
+      "bytes": 22,
+      "id": 206
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853914163
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853914164,
+      "direction": "write",
+      "bytes": 167,
+      "id": 207,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "DOM.getContentQuads"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853914164,
+      "direction": "write",
+      "bytes": 500,
+      "id": 208,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.callFunctionOn"
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853914508,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853914508,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853914508
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853914509,
+      "bytes": 179
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853914509,
+      "bytes": 179
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853914510,
+      "direction": "read",
+      "bytes": 179,
+      "id": 207
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853914510
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853914512,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853914512,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853914512
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853914512,
+      "bytes": 117
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853914512,
+      "bytes": 117
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853914512,
+      "direction": "read",
+      "bytes": 117,
+      "id": 208
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853914513
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853914514,
+      "direction": "write",
+      "bytes": 844,
+      "id": 209,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.callFunctionOn"
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853914858,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853914858,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853914858
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853914858,
+      "bytes": 173
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853914858,
+      "bytes": 173
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853914858,
+      "direction": "read",
+      "bytes": 173,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "DOM.attributeModified"
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853914859
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853914859,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853914859,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853914859
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853914860,
+      "bytes": 174
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853914860,
+      "bytes": 174
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853914860,
+      "direction": "read",
+      "bytes": 174,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "DOM.attributeModified"
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853914860
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853914861,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853914861,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853914861
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853914862,
+      "bytes": 131
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853914862,
+      "bytes": 131
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853914862,
+      "direction": "read",
+      "bytes": 131,
+      "id": 209
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853914862
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853914864,
+      "direction": "write",
+      "bytes": 236,
+      "id": 210,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Page.createIsolatedWorld"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853914864,
+      "direction": "write",
+      "bytes": 227,
+      "id": 211,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Input.dispatchMouseEvent"
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853915207,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853915207,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853915207
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853915208,
+      "bytes": 44
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853915208,
+      "bytes": 44
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853915208,
+      "direction": "read",
+      "bytes": 44,
+      "id": 210
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853915208
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853915209,
+      "direction": "write",
+      "bytes": 382,
+      "id": 212,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.evaluate"
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853915553,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853915553,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853915553
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853915554,
+      "bytes": 62
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853915554,
+      "bytes": 62
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853915554,
+      "direction": "read",
+      "bytes": 62,
+      "id": 212
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853915554
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853915555,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853915555,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853915555
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853915555,
+      "bytes": 140
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853915555,
+      "bytes": 140
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853915555,
+      "direction": "read",
+      "bytes": 140,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "DOM.inlineStyleInvalidated"
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853915555
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853915819,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853915819,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853915819
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853915820,
+      "bytes": 22
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853915820,
+      "bytes": 22
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853915820,
+      "direction": "read",
+      "bytes": 22,
+      "id": 211
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853915820
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853915822,
+      "direction": "write",
+      "bytes": 236,
+      "id": 213,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Page.createIsolatedWorld"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853915822,
+      "direction": "write",
+      "bytes": 246,
+      "id": 214,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Input.dispatchMouseEvent"
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853915866,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853915866,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853915866
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853915866,
+      "bytes": 161
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853915866,
+      "bytes": 161
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853915866,
+      "direction": "read",
+      "bytes": 161,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "DOM.attributeRemoved"
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853915867
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853915868,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853915868,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853915868
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853915868,
+      "bytes": 162
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853915868,
+      "bytes": 162
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853915868,
+      "direction": "read",
+      "bytes": 162,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "DOM.attributeRemoved"
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853915868
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916166,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916166,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916166
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916167,
+      "bytes": 44
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916167,
+      "bytes": 44
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916167,
+      "direction": "read",
+      "bytes": 44,
+      "id": 213
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916167
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916167,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916167,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916167
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916168,
+      "direction": "write",
+      "bytes": 382,
+      "id": 215,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.evaluate"
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916168,
+      "bytes": 22
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916168,
+      "bytes": 22
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916168,
+      "direction": "read",
+      "bytes": 22,
+      "id": 214
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916168
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916169,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916169,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916169
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916169,
+      "direction": "write",
+      "bytes": 235,
+      "id": 216,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Input.dispatchMouseEvent"
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916169,
+      "bytes": 173
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916169,
+      "bytes": 173
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916169,
+      "direction": "read",
+      "bytes": 173,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "DOM.attributeModified"
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916169
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916171,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916171,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916171
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916171,
+      "bytes": 174
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916171,
+      "bytes": 174
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916171,
+      "direction": "read",
+      "bytes": 174,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "DOM.attributeModified"
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916172
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916513,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916513,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916513
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916514,
+      "bytes": 62
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916514,
+      "bytes": 62
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916514,
+      "direction": "read",
+      "bytes": 62,
+      "id": 215
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916514
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916515,
+      "direction": "write",
+      "bytes": 236,
+      "id": 217,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Page.createIsolatedWorld"
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916529,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916529,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916529
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916536,
+      "bytes": 241
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916536,
+      "bytes": 241
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916536,
+      "direction": "read",
+      "bytes": 241,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.frameScheduledNavigation"
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916537
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916537,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916537,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916537
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916566,
+      "bytes": 258
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916566,
+      "bytes": 258
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916566,
+      "direction": "read",
+      "bytes": 258,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.frameRequestedNavigation"
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916566
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916581,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916582,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916582
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916604,
+      "bytes": 289
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916604,
+      "bytes": 289
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916604,
+      "direction": "read",
+      "bytes": 289,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.frameStartedNavigating"
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916604
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916706,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916706,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916706
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916707,
+      "bytes": 167
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916707,
+      "bytes": 167
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916707,
+      "direction": "read",
+      "bytes": 167,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.frameStartedLoading"
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916707
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916708,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916708,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916708
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916708,
+      "bytes": 1025
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916708,
+      "bytes": 1025
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916709,
+      "direction": "read",
+      "bytes": 1025,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Network.requestWillBeSent"
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916709
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916711,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916711,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916711
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916712,
+      "bytes": 22
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916712,
+      "bytes": 22
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916712,
+      "direction": "read",
+      "bytes": 22,
+      "id": 216
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916712
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916713,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916713,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916713
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916713,
+      "direction": "write",
+      "bytes": 169,
+      "id": 218,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.releaseObject"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916713,
+      "direction": "write",
+      "bytes": 109,
+      "id": 219,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Page.enable"
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916713,
+      "bytes": 179
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916713,
+      "bytes": 179
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916713,
+      "direction": "read",
+      "bytes": 179,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.frameClearedScheduledNavigation"
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916714
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916714,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916714,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916714
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916717,
+      "bytes": 1314
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916717,
+      "bytes": 1314
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916717,
+      "direction": "read",
+      "bytes": 1314,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Network.responseReceived"
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916717
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916719,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916719,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916719
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916719,
+      "bytes": 1187
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916719,
+      "bytes": 1187
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916719,
+      "direction": "read",
+      "bytes": 1187,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Network.requestWillBeSentExtraInfo"
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916719
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916723,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916723,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916723
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916724,
+      "bytes": 825
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916724,
+      "bytes": 825
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916724,
+      "direction": "read",
+      "bytes": 821,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Network.responseReceivedExtraInfo"
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916724
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916727,
+      "bytes": 131
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916727,
+      "bytes": 131
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916727,
+      "direction": "read",
+      "bytes": 131,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Runtime.executionContextsCleared"
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916727
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916907,
+      "bytes": 942
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916907,
+      "bytes": 10837
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916908,
+      "direction": "read",
+      "bytes": 247,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.lifecycleEvent"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916908,
+      "direction": "read",
+      "bytes": 131,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Runtime.executionContextsCleared"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916908,
+      "direction": "read",
+      "bytes": 548,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.frameNavigated"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916908,
+      "direction": "read",
+      "bytes": 120,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Network.policyUpdated"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916908,
+      "direction": "read",
+      "bytes": 118,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "DOM.documentUpdated"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916908,
+      "direction": "read",
+      "bytes": 338,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Runtime.executionContextCreated"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916908,
+      "direction": "read",
+      "bytes": 402,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Runtime.executionContextCreated"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916908,
+      "direction": "read",
+      "bytes": 405,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Runtime.executionContextCreated"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916908,
+      "direction": "read",
+      "bytes": 378,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Runtime.executionContextCreated"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916908,
+      "direction": "read",
+      "bytes": 383,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Runtime.executionContextCreated"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916908,
+      "direction": "read",
+      "bytes": 405,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Runtime.executionContextCreated"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916908,
+      "direction": "read",
+      "bytes": 410,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Runtime.consoleAPICalled"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916908,
+      "direction": "read",
+      "bytes": 244,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Network.loadingFinished"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916908,
+      "direction": "read",
+      "bytes": 118,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "DOM.documentUpdated"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916908,
+      "direction": "read",
+      "bytes": 149,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.domContentEventFired"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916908,
+      "direction": "read",
+      "bytes": 260,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.lifecycleEvent"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916908,
+      "direction": "read",
+      "bytes": 142,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.loadEventFired"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916908,
+      "direction": "read",
+      "bytes": 247,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.lifecycleEvent"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916909,
+      "direction": "read",
+      "bytes": 167,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.frameStoppedLoading"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916909,
+      "direction": "read",
+      "bytes": 929,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Accessibility.loadComplete"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916909,
+      "direction": "read",
+      "bytes": 966,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Network.requestWillBeSent"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916909,
+      "direction": "read",
+      "bytes": 1294,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Network.responseReceived"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916909,
+      "direction": "read",
+      "bytes": 219,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Network.loadingFinished"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916909,
+      "direction": "read",
+      "bytes": 1040,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Network.requestWillBeSentExtraInfo"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916909,
+      "direction": "read",
+      "bytes": 796,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Network.responseReceivedExtraInfo"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916909,
+      "direction": "read",
+      "bytes": 273,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.lifecycleEvent"
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916909
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916909,
+      "bytes": 7547
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916909,
+      "bytes": 2348
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853916926,
+      "bytes": 1507
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853916926,
+      "bytes": 1507
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916926,
+      "direction": "read",
+      "bytes": 264,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.lifecycleEvent"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916926,
+      "direction": "read",
+      "bytes": 254,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.lifecycleEvent"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916927,
+      "direction": "read",
+      "bytes": 932,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Accessibility.nodesUpdated"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916927,
+      "direction": "read",
+      "bytes": 45,
+      "id": 217
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853916927
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853916928,
+      "direction": "write",
+      "bytes": 381,
+      "id": 220,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.evaluate"
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853917061,
+      "bytes": 122
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853917061,
+      "bytes": 122
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853917061,
+      "direction": "read",
+      "bytes": 92,
+      "id": 218
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853917061,
+      "direction": "read",
+      "bytes": 22,
+      "id": 219
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853917061
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853917063,
+      "direction": "write",
+      "bytes": 169,
+      "id": 221,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.releaseObject"
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853917064,
+      "direction": "write",
+      "bytes": 13716,
+      "id": 222,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.evaluate"
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853917221,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853917221,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853917221
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853917222,
+      "bytes": 261
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853917222,
+      "bytes": 261
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853917222,
+      "direction": "read",
+      "bytes": 261,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.lifecycleEvent"
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853917222
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853917223,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853917223,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853917223
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853917224,
+      "bytes": 264
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853917224,
+      "bytes": 264
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853917224,
+      "direction": "read",
+      "bytes": 264,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.lifecycleEvent"
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853917224
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853917225,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853917225,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853917225
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853917226,
+      "bytes": 255
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853917226,
+      "bytes": 255
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853917226,
+      "direction": "read",
+      "bytes": 255,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.lifecycleEvent"
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853917226
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853917272,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853917272,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853917272
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853917272,
+      "bytes": 63
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853917272,
+      "bytes": 63
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853917272,
+      "direction": "read",
+      "bytes": 63,
+      "id": 220
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853917272
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853917274,
+      "direction": "write",
+      "bytes": 236,
+      "id": 223,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Page.createIsolatedWorld"
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853917407,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853917407,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853917407
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853917408,
+      "bytes": 92
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853917408,
+      "bytes": 92
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853917408,
+      "direction": "read",
+      "bytes": 92,
+      "id": 221
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853917408
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853917475,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853917475,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853917475
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853917475,
+      "bytes": 145
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853917475,
+      "bytes": 145
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853917475,
+      "direction": "read",
+      "bytes": 145,
+      "id": 222
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853917475
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853917476,
+      "direction": "write",
+      "bytes": 472,
+      "id": 224,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.callFunctionOn"
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853917616,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853917616,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853917616
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853917617,
+      "bytes": 45
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853917617,
+      "bytes": 45
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853917617,
+      "direction": "read",
+      "bytes": 45,
+      "id": 223
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853917617
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853917619,
+      "direction": "write",
+      "bytes": 16164,
+      "id": 225,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.evaluate"
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853917823,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853917823,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853917823
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853917825,
+      "bytes": 71
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853917825,
+      "bytes": 71
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853917825,
+      "direction": "read",
+      "bytes": 71,
+      "id": 224
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853917825
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853917827,
+      "direction": "write",
+      "bytes": 236,
+      "id": 226,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Page.createIsolatedWorld"
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853918032,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853918032,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853918032
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853918032,
+      "bytes": 51
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853918032,
+      "bytes": 51
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853918032,
+      "direction": "read",
+      "bytes": 51,
+      "id": 225
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853918032
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853918173,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853918173,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853918173
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853918173,
+      "bytes": 45
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853918173,
+      "bytes": 45
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853918173,
+      "direction": "read",
+      "bytes": 45,
+      "id": 226
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853918173
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853918175,
+      "direction": "write",
+      "bytes": 1296,
+      "id": 227,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.evaluate"
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853918523,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853918523,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853918523
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853918523,
+      "bytes": 325
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853918523,
+      "bytes": 325
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853918523,
+      "direction": "read",
+      "bytes": 325,
+      "id": 227
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853918523
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853918525,
+      "direction": "write",
+      "bytes": 159,
+      "id": 228,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Emulation.setFocusEmulationEnabled"
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853918868,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853918868,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853918868
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853918868,
+      "bytes": 22
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853918868,
+      "bytes": 22
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853918868,
+      "direction": "read",
+      "bytes": 22,
+      "id": 228
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853918868
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853918908,
+      "direction": "write",
+      "bytes": 158,
+      "id": 229,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Emulation.setFocusEmulationEnabled"
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853919253,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853919253,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853919253
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853919253,
+      "bytes": 22
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853919253,
+      "bytes": 22
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853919253,
+      "direction": "read",
+      "bytes": 22,
+      "id": 229
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853919253
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853919254,
+      "direction": "write",
+      "bytes": 13715,
+      "id": 230,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.evaluate"
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853919651,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853919651,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853919651
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853919651,
+      "bytes": 144
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853919651,
+      "bytes": 144
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853919651,
+      "direction": "read",
+      "bytes": 144,
+      "id": 230
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853919651
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853919654,
+      "direction": "write",
+      "bytes": 477,
+      "id": 231,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.callFunctionOn"
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853919998,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853919998,
+      "bytes": 4
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853919998
+    },
+    {
+      "stage": "native-child-read",
+      "at": 1794853919998,
+      "bytes": 218
+    },
+    {
+      "stage": "native-pipe-read",
+      "at": 1794853919998,
+      "bytes": 218
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853919998,
+      "direction": "read",
+      "bytes": 218,
+      "id": 231
+    },
+    {
+      "stage": "native-pipe-resume",
+      "at": 1794853919998
+    },
+    {
+      "stage": "controller-frame",
+      "at": 1794853919999,
+      "direction": "write",
+      "bytes": 159,
+      "id": 232,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Emulation.setFocusEmulationEnabled"
+    }
+  ],
+  "browserTrace": [
+    {
+      "stage": "derp-construct",
+      "socketId": 1,
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853843516
+    },
+    {
+      "stage": "derp-open",
+      "socketId": 1,
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853844030
+    },
+    {
+      "stage": "derp-close",
+      "socketId": 1,
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853920222
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853920232
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853920271
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853920327
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853920517
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853920527
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853920803
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853920876
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853921274
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853921593
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853921639
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853922346
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853923023
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853923105
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853923688
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853925484
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853925881
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853926411
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853927386
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853929400
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853931344
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853931596
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853934368
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853934895
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853937291
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853940062
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853941119
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853943025
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853944541
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853945265
+    },
+    {
+      "stage": "derp-denied",
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853948658
+    },
+    {
+      "stage": "derp-construct",
+      "socketId": 2,
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853950301
+    },
+    {
+      "stage": "derp-open",
+      "socketId": 2,
+      "endpoint": "wss://tc302a.ipn.dev",
+      "at": 1794853950856
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 282,
+      "at": 1794853910034
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853910034,
+      "direction": "read",
+      "bytes": 169,
+      "id": 193,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.releaseObject"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853910034,
+      "direction": "read",
+      "bytes": 109,
+      "id": 194,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Page.enable"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853910034,
+      "direction": "write",
+      "bytes": 22,
+      "id": 193
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853910034
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 22,
+      "at": 1794853910035
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853910036,
+      "direction": "write",
+      "bytes": 22,
+      "id": 194
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853910036
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 22,
+      "at": 1794853910036
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 381,
+      "at": 1794853910274
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853910274,
+      "direction": "read",
+      "bytes": 377,
+      "id": 195,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.evaluate"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853910275,
+      "direction": "write",
+      "bytes": 62,
+      "id": 195
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853910275
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 62,
+      "at": 1794853910275
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 173,
+      "at": 1794853910380
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853910380,
+      "direction": "read",
+      "bytes": 169,
+      "id": 196,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.releaseObject"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853910380,
+      "direction": "write",
+      "bytes": 22,
+      "id": 196
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853910380
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 158,
+      "at": 1794853910381
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853910381,
+      "direction": "read",
+      "bytes": 154,
+      "id": 197,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Network.getResponseBody"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 22,
+      "at": 1794853910381
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853910382,
+      "direction": "write",
+      "bytes": 103,
+      "id": 197
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853910382
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 103,
+      "at": 1794853910383
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 163,
+      "at": 1794853910727
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853910727,
+      "direction": "read",
+      "bytes": 159,
+      "id": 198,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Emulation.setFocusEmulationEnabled"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853910728,
+      "direction": "write",
+      "bytes": 22,
+      "id": 198
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853910728
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 22,
+      "at": 1794853910729
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 162,
+      "at": 1794853911131
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853911131,
+      "direction": "read",
+      "bytes": 158,
+      "id": 199,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Emulation.setFocusEmulationEnabled"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853911132,
+      "direction": "write",
+      "bytes": 22,
+      "id": 199
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853911132
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 22,
+      "at": 1794853911135
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853911478
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 1180,
+      "at": 1794853911480
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 1180,
+      "at": 1794853911485
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 458,
+      "at": 1794853911491
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853911491,
+      "direction": "read",
+      "bytes": 2818,
+      "id": 200,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.callFunctionOn"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853911493,
+      "direction": "write",
+      "bytes": 131,
+      "id": 200
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853911493
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 131,
+      "at": 1794853911494
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 568,
+      "at": 1794853911840
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853911840,
+      "direction": "read",
+      "bytes": 564,
+      "id": 201,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.callFunctionOn"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853911841,
+      "direction": "write",
+      "bytes": 344,
+      "id": 201
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853911841
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 344,
+      "at": 1794853911842
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 531,
+      "at": 1794853912191
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853912191,
+      "direction": "read",
+      "bytes": 527,
+      "id": 202,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.callFunctionOn"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853912192,
+      "direction": "write",
+      "bytes": 154,
+      "id": 202
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853912192
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 154,
+      "at": 1794853912193
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 599,
+      "at": 1794853912537
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853912537,
+      "direction": "read",
+      "bytes": 595,
+      "id": 203,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.callFunctionOn"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853912537,
+      "direction": "write",
+      "bytes": 106,
+      "id": 203
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853912537
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 1034,
+      "at": 1794853912537
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853912537,
+      "direction": "read",
+      "bytes": 169,
+      "id": 204,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.releaseObject"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853912537,
+      "direction": "read",
+      "bytes": 857,
+      "id": 205,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.callFunctionOn"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 106,
+      "at": 1794853912538
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853912538,
+      "direction": "write",
+      "bytes": 22,
+      "id": 204
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853912538
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 22,
+      "at": 1794853912539
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853913646,
+      "direction": "write",
+      "bytes": 51,
+      "id": 205
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853913646
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 51,
+      "at": 1794853913648
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 178,
+      "at": 1794853913991
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853913991,
+      "direction": "read",
+      "bytes": 174,
+      "id": 206,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "DOM.scrollIntoViewIfNeeded"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853913992,
+      "direction": "write",
+      "bytes": 22,
+      "id": 206
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853913992
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 22,
+      "at": 1794853913993
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853914336
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 171,
+      "at": 1794853914337
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853914337,
+      "direction": "read",
+      "bytes": 167,
+      "id": 207,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "DOM.getContentQuads"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853914338,
+      "direction": "write",
+      "bytes": 179,
+      "id": 207
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853914338
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 179,
+      "at": 1794853914339
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 500,
+      "at": 1794853914339
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853914339,
+      "direction": "read",
+      "bytes": 500,
+      "id": 208,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.callFunctionOn"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853914340,
+      "direction": "write",
+      "bytes": 117,
+      "id": 208
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853914340
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 117,
+      "at": 1794853914340
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 848,
+      "at": 1794853914686
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853914686,
+      "direction": "read",
+      "bytes": 844,
+      "id": 209,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.callFunctionOn"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853914687,
+      "direction": "write",
+      "bytes": 173,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "DOM.attributeModified"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853914687
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 173,
+      "at": 1794853914688
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853914689,
+      "direction": "write",
+      "bytes": 174,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "DOM.attributeModified"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853914689
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 174,
+      "at": 1794853914690
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853914691,
+      "direction": "write",
+      "bytes": 131,
+      "id": 209
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853914691
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 131,
+      "at": 1794853914691
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 240,
+      "at": 1794853915036
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853915036,
+      "direction": "read",
+      "bytes": 236,
+      "id": 210,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Page.createIsolatedWorld"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853915037,
+      "direction": "write",
+      "bytes": 44,
+      "id": 210
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853915037
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 231,
+      "at": 1794853915038
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853915038,
+      "direction": "read",
+      "bytes": 227,
+      "id": 211,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Input.dispatchMouseEvent"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 44,
+      "at": 1794853915038
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 386,
+      "at": 1794853915382
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853915382,
+      "direction": "read",
+      "bytes": 382,
+      "id": 212,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.evaluate"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853915383,
+      "direction": "write",
+      "bytes": 62,
+      "id": 212
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853915383
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 62,
+      "at": 1794853915384
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853915384,
+      "direction": "write",
+      "bytes": 140,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "DOM.inlineStyleInvalidated"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853915384
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 140,
+      "at": 1794853915385
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853915648,
+      "direction": "write",
+      "bytes": 22,
+      "id": 211
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853915648
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 22,
+      "at": 1794853915649
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853915695,
+      "direction": "write",
+      "bytes": 161,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "DOM.attributeRemoved"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853915695
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 161,
+      "at": 1794853915696
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853915697,
+      "direction": "write",
+      "bytes": 162,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "DOM.attributeRemoved"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853915697
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 162,
+      "at": 1794853915698
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853915994
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 486,
+      "at": 1794853915995
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853915995,
+      "direction": "read",
+      "bytes": 236,
+      "id": 213,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Page.createIsolatedWorld"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853915995,
+      "direction": "read",
+      "bytes": 246,
+      "id": 214,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Input.dispatchMouseEvent"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853915996,
+      "direction": "write",
+      "bytes": 44,
+      "id": 213
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853915996
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 44,
+      "at": 1794853915996
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853915997,
+      "direction": "write",
+      "bytes": 22,
+      "id": 214
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853915997
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 22,
+      "at": 1794853915998
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853915998,
+      "direction": "write",
+      "bytes": 173,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "DOM.attributeModified"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853915998
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 173,
+      "at": 1794853915999
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916000,
+      "direction": "write",
+      "bytes": 174,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "DOM.attributeModified"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916000
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 174,
+      "at": 1794853916000
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916341
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 382,
+      "at": 1794853916342
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916342,
+      "direction": "read",
+      "bytes": 382,
+      "id": 215,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.evaluate"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916343,
+      "direction": "write",
+      "bytes": 62,
+      "id": 215
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916343
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 62,
+      "at": 1794853916344
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 239,
+      "at": 1794853916347
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916347,
+      "direction": "read",
+      "bytes": 235,
+      "id": 216,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Input.dispatchMouseEvent"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916348,
+      "direction": "write",
+      "bytes": 241,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.frameScheduledNavigation"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916348
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 241,
+      "at": 1794853916362
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916366,
+      "direction": "write",
+      "bytes": 258,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.frameRequestedNavigation"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916366
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 258,
+      "at": 1794853916383
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916400,
+      "direction": "write",
+      "bytes": 289,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.frameStartedNavigating"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916400
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 289,
+      "at": 1794853916433
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916535,
+      "direction": "write",
+      "bytes": 167,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.frameStartedLoading"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916535
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 167,
+      "at": 1794853916537
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916537,
+      "direction": "write",
+      "bytes": 1025,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Network.requestWillBeSent"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916537
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 1025,
+      "at": 1794853916538
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916541,
+      "direction": "write",
+      "bytes": 22,
+      "id": 216
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916541
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 22,
+      "at": 1794853916542
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916543,
+      "direction": "write",
+      "bytes": 179,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.frameClearedScheduledNavigation"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916543
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 179,
+      "at": 1794853916543
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916544,
+      "direction": "write",
+      "bytes": 1314,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Network.responseReceived"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916544
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 1314,
+      "at": 1794853916545
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916547,
+      "direction": "write",
+      "bytes": 1187,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Network.requestWillBeSentExtraInfo"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916547
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 1187,
+      "at": 1794853916548
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916549,
+      "direction": "write",
+      "bytes": 821,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Network.responseReceivedExtraInfo"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916549
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 821,
+      "at": 1794853916550
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916550,
+      "direction": "write",
+      "bytes": 131,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Runtime.executionContextsCleared"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916550
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 131,
+      "at": 1794853916553
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916554,
+      "direction": "write",
+      "bytes": 247,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.lifecycleEvent"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916554
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 247,
+      "at": 1794853916555
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916556,
+      "direction": "write",
+      "bytes": 131,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Runtime.executionContextsCleared"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916556
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 131,
+      "at": 1794853916556
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916557,
+      "direction": "write",
+      "bytes": 548,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.frameNavigated"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916557
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 548,
+      "at": 1794853916559
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916560,
+      "direction": "write",
+      "bytes": 120,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Network.policyUpdated"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916560
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 120,
+      "at": 1794853916561
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916561,
+      "direction": "write",
+      "bytes": 118,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "DOM.documentUpdated"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916561
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 118,
+      "at": 1794853916562
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916563,
+      "direction": "write",
+      "bytes": 338,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Runtime.executionContextCreated"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916563
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 338,
+      "at": 1794853916565
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916566,
+      "direction": "write",
+      "bytes": 402,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Runtime.executionContextCreated"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916566
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 402,
+      "at": 1794853916567
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916568,
+      "direction": "write",
+      "bytes": 405,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Runtime.executionContextCreated"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916568
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 405,
+      "at": 1794853916569
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916571,
+      "direction": "write",
+      "bytes": 378,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Runtime.executionContextCreated"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916571
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 378,
+      "at": 1794853916572
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916573,
+      "direction": "write",
+      "bytes": 383,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Runtime.executionContextCreated"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916573
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 383,
+      "at": 1794853916573
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916574,
+      "direction": "write",
+      "bytes": 405,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Runtime.executionContextCreated"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916574
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 405,
+      "at": 1794853916574
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916575,
+      "direction": "write",
+      "bytes": 410,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Runtime.consoleAPICalled"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916575
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 410,
+      "at": 1794853916575
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916577,
+      "direction": "write",
+      "bytes": 244,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Network.loadingFinished"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916577
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 244,
+      "at": 1794853916577
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916578,
+      "direction": "write",
+      "bytes": 118,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "DOM.documentUpdated"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916578
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 118,
+      "at": 1794853916578
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916579,
+      "direction": "write",
+      "bytes": 149,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.domContentEventFired"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916579
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 149,
+      "at": 1794853916579
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916580,
+      "direction": "write",
+      "bytes": 260,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.lifecycleEvent"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916580
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 260,
+      "at": 1794853916580
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916581,
+      "direction": "write",
+      "bytes": 142,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.loadEventFired"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916581
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 142,
+      "at": 1794853916584
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916585,
+      "direction": "write",
+      "bytes": 247,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.lifecycleEvent"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916585
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 247,
+      "at": 1794853916586
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916586,
+      "direction": "write",
+      "bytes": 167,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.frameStoppedLoading"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916586
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 167,
+      "at": 1794853916587
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916588,
+      "direction": "write",
+      "bytes": 929,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Accessibility.loadComplete"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916588
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 929,
+      "at": 1794853916589
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916589,
+      "direction": "write",
+      "bytes": 966,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Network.requestWillBeSent"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916589
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 966,
+      "at": 1794853916590
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916590,
+      "direction": "write",
+      "bytes": 1294,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Network.responseReceived"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916590
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 1294,
+      "at": 1794853916591
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916591,
+      "direction": "write",
+      "bytes": 219,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Network.loadingFinished"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916591
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 219,
+      "at": 1794853916592
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916592,
+      "direction": "write",
+      "bytes": 1040,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Network.requestWillBeSentExtraInfo"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916592
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 1040,
+      "at": 1794853916593
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916594,
+      "direction": "write",
+      "bytes": 796,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Network.responseReceivedExtraInfo"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916594
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 796,
+      "at": 1794853916594
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916595,
+      "direction": "write",
+      "bytes": 273,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.lifecycleEvent"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916595
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 273,
+      "at": 1794853916595
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916596,
+      "direction": "write",
+      "bytes": 264,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.lifecycleEvent"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916596
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 264,
+      "at": 1794853916597
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916597,
+      "direction": "write",
+      "bytes": 254,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.lifecycleEvent"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916597
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 254,
+      "at": 1794853916598
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916643,
+      "direction": "write",
+      "bytes": 932,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Accessibility.nodesUpdated"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916643
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 932,
+      "at": 1794853916643
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 240,
+      "at": 1794853916688
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916688,
+      "direction": "read",
+      "bytes": 236,
+      "id": 217,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Page.createIsolatedWorld"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916689,
+      "direction": "write",
+      "bytes": 45,
+      "id": 217
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916689
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 45,
+      "at": 1794853916689
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916886
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 282,
+      "at": 1794853916886
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916886,
+      "direction": "read",
+      "bytes": 169,
+      "id": 218,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.releaseObject"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916886,
+      "direction": "read",
+      "bytes": 109,
+      "id": 219,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Page.enable"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916887,
+      "direction": "write",
+      "bytes": 92,
+      "id": 218
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916887
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 92,
+      "at": 1794853916888
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853916888,
+      "direction": "write",
+      "bytes": 22,
+      "id": 219
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853916888
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 22,
+      "at": 1794853916889
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853917051,
+      "direction": "write",
+      "bytes": 261,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.lifecycleEvent"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853917051
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 261,
+      "at": 1794853917052
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853917052,
+      "direction": "write",
+      "bytes": 264,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.lifecycleEvent"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853917052
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 264,
+      "at": 1794853917053
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853917053,
+      "direction": "write",
+      "bytes": 255,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.lifecycleEvent"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853917053
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 255,
+      "at": 1794853917054
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 385,
+      "at": 1794853917101
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853917101,
+      "direction": "read",
+      "bytes": 381,
+      "id": 220,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.evaluate"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853917102,
+      "direction": "write",
+      "bytes": 63,
+      "id": 220
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853917102
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 63,
+      "at": 1794853917102
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853917236
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 169,
+      "at": 1794853917237
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853917237,
+      "direction": "read",
+      "bytes": 169,
+      "id": 221,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.releaseObject"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853917237,
+      "direction": "write",
+      "bytes": 92,
+      "id": 221
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853917237
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 92,
+      "at": 1794853917238
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853917253
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 2360,
+      "at": 1794853917254
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 1180,
+      "at": 1794853917264
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 3540,
+      "at": 1794853917265
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 1180,
+      "at": 1794853917275
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 2360,
+      "at": 1794853917276
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 1180,
+      "at": 1794853917301
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 1916,
+      "at": 1794853917303
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853917303,
+      "direction": "read",
+      "bytes": 13716,
+      "id": 222,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.evaluate"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853917304,
+      "direction": "write",
+      "bytes": 145,
+      "id": 222
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853917304
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 145,
+      "at": 1794853917305
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 240,
+      "at": 1794853917446
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853917446,
+      "direction": "read",
+      "bytes": 236,
+      "id": 223,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Page.createIsolatedWorld"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853917446,
+      "direction": "write",
+      "bytes": 45,
+      "id": 223
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853917446
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 45,
+      "at": 1794853917447
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 476,
+      "at": 1794853917649
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853917649,
+      "direction": "read",
+      "bytes": 472,
+      "id": 224,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.callFunctionOn"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853917651,
+      "direction": "write",
+      "bytes": 71,
+      "id": 224
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853917651
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 71,
+      "at": 1794853917653
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 1180,
+      "at": 1794853917792
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 1180,
+      "at": 1794853917795
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 1180,
+      "at": 1794853917800
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 1180,
+      "at": 1794853917811
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 1180,
+      "at": 1794853917812
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 1180,
+      "at": 1794853917822
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 2360,
+      "at": 1794853917823
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 1180,
+      "at": 1794853917845
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 2360,
+      "at": 1794853917845
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 1180,
+      "at": 1794853917855
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 2008,
+      "at": 1794853917856
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853917856,
+      "direction": "read",
+      "bytes": 16164,
+      "id": 225,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.evaluate"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853917861,
+      "direction": "write",
+      "bytes": 51,
+      "id": 225
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853917861
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 51,
+      "at": 1794853917862
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 240,
+      "at": 1794853918002
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853918002,
+      "direction": "read",
+      "bytes": 236,
+      "id": 226,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Page.createIsolatedWorld"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853918003,
+      "direction": "write",
+      "bytes": 45,
+      "id": 226
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853918003
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 45,
+      "at": 1794853918003
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 1180,
+      "at": 1794853918347
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 120,
+      "at": 1794853918351
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853918351,
+      "direction": "read",
+      "bytes": 1296,
+      "id": 227,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.evaluate"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853918352,
+      "direction": "write",
+      "bytes": 325,
+      "id": 227
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853918352
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 325,
+      "at": 1794853918353
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 163,
+      "at": 1794853918697
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853918697,
+      "direction": "read",
+      "bytes": 159,
+      "id": 228,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Emulation.setFocusEmulationEnabled"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853918697,
+      "direction": "write",
+      "bytes": 22,
+      "id": 228
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853918697
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 22,
+      "at": 1794853918698
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 162,
+      "at": 1794853919081
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853919081,
+      "direction": "read",
+      "bytes": 158,
+      "id": 229,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Emulation.setFocusEmulationEnabled"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853919082,
+      "direction": "write",
+      "bytes": 22,
+      "id": 229
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853919082
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 22,
+      "at": 1794853919083
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 1180,
+      "at": 1794853919426
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 1180,
+      "at": 1794853919427
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 1180,
+      "at": 1794853919436
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 1180,
+      "at": 1794853919436
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 1180,
+      "at": 1794853919457
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 2360,
+      "at": 1794853919457
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 1180,
+      "at": 1794853919468
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 2360,
+      "at": 1794853919469
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 1180,
+      "at": 1794853919479
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 739,
+      "at": 1794853919480
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853919480,
+      "direction": "read",
+      "bytes": 13715,
+      "id": 230,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.evaluate"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853919481,
+      "direction": "write",
+      "bytes": 144,
+      "id": 230
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853919481
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 144,
+      "at": 1794853919481
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 1,
+      "bytes": 481,
+      "at": 1794853919826
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853919826,
+      "direction": "read",
+      "bytes": 477,
+      "id": 231,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.callFunctionOn"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853919827,
+      "direction": "write",
+      "bytes": 218,
+      "id": 231
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853919827
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 218,
+      "at": 1794853919828
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 1,
+      "at": 1794853921412,
+      "direction": "write",
+      "bytes": 259,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.lifecycleEvent"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 4,
+      "at": 1794853921412
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 1,
+      "bytes": 259,
+      "at": 1794853921413
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 6,
+      "at": 1794853953855
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 2,
+      "bytes": 6,
+      "at": 1794853953855
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853953856,
+      "direction": "write",
+      "bytes": 79,
+      "method": "hello"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853953856
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 79,
+      "at": 1794853953857
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853953857,
+      "direction": "write",
+      "bytes": 388,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Target.attachedToTarget"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853953857
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 388,
+      "at": 1794853953858
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 2,
+      "bytes": 128,
+      "at": 1794853954769
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853954769,
+      "direction": "read",
+      "bytes": 124,
+      "id": 1,
+      "method": "updateTabGroup"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853954769,
+      "direction": "write",
+      "bytes": 48,
+      "id": 1
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853954769
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 48,
+      "at": 1794853954774
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 2,
+      "bytes": 397,
+      "at": 1794853955700
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853955700,
+      "direction": "read",
+      "bytes": 154,
+      "id": 2,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Target.setAutoAttach"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853955700,
+      "direction": "read",
+      "bytes": 235,
+      "id": 3,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Page.setDownloadBehavior"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853955702,
+      "direction": "write",
+      "bytes": 93,
+      "id": 3
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853955702
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 93,
+      "at": 1794853955703
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853955704,
+      "direction": "write",
+      "bytes": 20,
+      "id": 2
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853955704
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 20,
+      "at": 1794853955704
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853956061
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 2,
+      "bytes": 1180,
+      "at": 1794853956064
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956064,
+      "direction": "read",
+      "bytes": 156,
+      "id": 4,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Emulation.setFocusEmulationEnabled"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956064,
+      "direction": "read",
+      "bytes": 113,
+      "id": 5,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Page.getFrameTree"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956065,
+      "direction": "read",
+      "bytes": 118,
+      "id": 6,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Log.enable"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956065,
+      "direction": "read",
+      "bytes": 152,
+      "id": 7,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Page.setLifecycleEventsEnabled"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956065,
+      "direction": "read",
+      "bytes": 122,
+      "id": 8,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.enable"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956065,
+      "direction": "read",
+      "bytes": 235,
+      "id": 9,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Page.addScriptToEvaluateOnNewDocument"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956065,
+      "direction": "read",
+      "bytes": 111,
+      "id": 10,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Network.enable"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956065,
+      "direction": "write",
+      "bytes": 20,
+      "id": 4
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853956065
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 2,
+      "bytes": 50,
+      "at": 1794853956065
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956065,
+      "direction": "read",
+      "bytes": 191,
+      "id": 11,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Target.setAutoAttach"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 20,
+      "at": 1794853956066
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956067,
+      "direction": "write",
+      "bytes": 444,
+      "id": 5
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853956067
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 444,
+      "at": 1794853956067
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956067,
+      "direction": "write",
+      "bytes": 20,
+      "id": 6
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853956067
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 20,
+      "at": 1794853956068
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956068,
+      "direction": "write",
+      "bytes": 250,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.lifecycleEvent"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853956068
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 250,
+      "at": 1794853956069
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956069,
+      "direction": "write",
+      "bytes": 260,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.lifecycleEvent"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853956069
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 260,
+      "at": 1794853956069
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956070,
+      "direction": "write",
+      "bytes": 248,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.lifecycleEvent"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853956070
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 248,
+      "at": 1794853956070
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956070,
+      "direction": "write",
+      "bytes": 261,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.lifecycleEvent"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853956070
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 261,
+      "at": 1794853956071
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956071,
+      "direction": "write",
+      "bytes": 255,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Page.lifecycleEvent"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853956071
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 255,
+      "at": 1794853956072
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956072,
+      "direction": "write",
+      "bytes": 47,
+      "id": 9
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853956072
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 47,
+      "at": 1794853956072
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956073,
+      "direction": "write",
+      "bytes": 20,
+      "id": 7
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853956073
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 20,
+      "at": 1794853956073
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956074,
+      "direction": "write",
+      "bytes": 21,
+      "id": 10
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853956074
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 21,
+      "at": 1794853956074
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956075,
+      "direction": "write",
+      "bytes": 21,
+      "id": 11
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853956075
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 21,
+      "at": 1794853956075
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956117,
+      "direction": "write",
+      "bytes": 405,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Runtime.executionContextCreated"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853956117
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 405,
+      "at": 1794853956117
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956118,
+      "direction": "write",
+      "bytes": 383,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Runtime.executionContextCreated"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853956118
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 383,
+      "at": 1794853956118
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956119,
+      "direction": "write",
+      "bytes": 378,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Runtime.executionContextCreated"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853956119
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 378,
+      "at": 1794853956119
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956120,
+      "direction": "write",
+      "bytes": 405,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Runtime.executionContextCreated"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853956120
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 405,
+      "at": 1794853956121
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956121,
+      "direction": "write",
+      "bytes": 402,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Runtime.executionContextCreated"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853956121
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 402,
+      "at": 1794853956121
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956122,
+      "direction": "write",
+      "bytes": 338,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Runtime.executionContextCreated"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853956122
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 338,
+      "at": 1794853956122
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956122,
+      "direction": "write",
+      "bytes": 410,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Runtime.consoleAPICalled"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853956122
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 410,
+      "at": 1794853956123
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956123,
+      "direction": "write",
+      "bytes": 20,
+      "id": 8
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853956123
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 20,
+      "at": 1794853956123
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 2,
+      "bytes": 600,
+      "at": 1794853956229
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956229,
+      "direction": "read",
+      "bytes": 351,
+      "id": 12,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Emulation.setEmulatedMedia"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956229,
+      "direction": "read",
+      "bytes": 113,
+      "id": 13,
+      "method": "forwardCDPCommand"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956229,
+      "direction": "read",
+      "bytes": 128,
+      "id": 14,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.runIfWaitingForDebugger"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956229,
+      "direction": "write",
+      "bytes": 21,
+      "id": 13
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853956229
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 21,
+      "at": 1794853956230
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956231,
+      "direction": "write",
+      "bytes": 21,
+      "id": 12
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853956231
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 21,
+      "at": 1794853956231
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956232,
+      "direction": "write",
+      "bytes": 21,
+      "id": 14
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853956232
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 21,
+      "at": 1794853956232
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 2,
+      "bytes": 112,
+      "at": 1794853956419
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956419,
+      "direction": "read",
+      "bytes": 108,
+      "id": 15,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Page.enable"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956420,
+      "direction": "write",
+      "bytes": 21,
+      "id": 15
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853956420
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 21,
+      "at": 1794853956420
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 2,
+      "bytes": 287,
+      "at": 1794853956428
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956428,
+      "direction": "read",
+      "bytes": 283,
+      "id": 16,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Page.createIsolatedWorld"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956430,
+      "direction": "write",
+      "bytes": 403,
+      "method": "forwardCDPEvent",
+      "cdpMethod": "Runtime.executionContextCreated"
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853956430
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 403,
+      "at": 1794853956431
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853956432,
+      "direction": "write",
+      "bytes": 44,
+      "id": 16
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853956432
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 44,
+      "at": 1794853956432
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853956804
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 2,
+      "bytes": 2360,
+      "at": 1794853956805
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 2,
+      "bytes": 1180,
+      "at": 1794853956945
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 2,
+      "bytes": 1180,
+      "at": 1794853956946
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 2,
+      "bytes": 1180,
+      "at": 1794853956962
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 2,
+      "bytes": 1180,
+      "at": 1794853956963
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 2,
+      "bytes": 1180,
+      "at": 1794853957063
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 2,
+      "bytes": 5455,
+      "at": 1794853957064
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853957064,
+      "direction": "read",
+      "bytes": 13715,
+      "id": 17,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.evaluate"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853957065,
+      "direction": "write",
+      "bytes": 144,
+      "id": 17
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853957065
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 144,
+      "at": 1794853957066
+    },
+    {
+      "stage": "browser-pipe-read",
+      "generation": 2,
+      "bytes": 475,
+      "at": 1794853957418
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853957418,
+      "direction": "read",
+      "bytes": 471,
+      "id": 18,
+      "method": "forwardCDPCommand",
+      "cdpMethod": "Runtime.callFunctionOn"
+    },
+    {
+      "stage": "browser-frame",
+      "generation": 2,
+      "at": 1794853957419,
+      "direction": "write",
+      "bytes": 70,
+      "id": 18
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 4,
+      "at": 1794853957419
+    },
+    {
+      "stage": "browser-pipe-write",
+      "generation": 2,
+      "bytes": 70,
+      "at": 1794853957420
+    }
+  ],
+  "requests": {
+    "/fixture": 2,
+    "/favicon.ico": 2,
+    "/json": 1,
+    "/oversized": 1,
+    "/evicted": 1,
+    "/next": 1
+  },
+  "result": "passed"
+}

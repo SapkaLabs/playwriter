@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Playwriter",
-  "version": "0.0.174",
+  "version": "0.0.180",
   "description": "Automate your Browser using Cursor, Claude, VS Code. More capable and context efficient than Playwright MCP.",
   "permissions": [
     "debugger",
@@ -16,6 +16,9 @@
     "webNavigation"
   ],
   "host_permissions": ["<all_urls>"],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
   "background": {
     "service_worker": "background.js",
     "type": "module"

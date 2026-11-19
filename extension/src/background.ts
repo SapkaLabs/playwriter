@@ -82,6 +82,7 @@ import {
   type ConnectionReply,
   type ConnectionRequest,
   type LocalConnection,
+  type Route,
 } from './connection-settings'
 
 function isTruthy<T>(value: T): value is NonNullable<T> {
@@ -321,32 +322,28 @@ let autoAttachParams: Protocol.Target.SetAutoAttachRequest | null = null
 // local relay: every attached tab, plus new tabs it opens (in the background, in
 // its session tab group). Only whole-profile cookie/cache commands are denied.
 //
-// Lifecycle:
-// - Share starts from the in-page toolbar (confirmed in its dialog): that tab is
-//   the anchor tab.
-// - Stop sharing (toolbar or menus), closing or disconnecting the anchor tab, or
-//   cancelling Chrome's debugger infobar closes the tunnel and every tunneled
-//   connection immediately.
-// - On stop, tabs attached because of the remote (created by it, or opened as
-//   target=_blank children while sharing) are detached and left open.
-//
-// Runtime objects (WebSockets) live here; only the evidence needed to rebuild the
-// tunnel after a service-worker restart is persisted in chrome.storage.session
-// as {anchorTabId, tunnelId, remoteTabIds}. The link survives SW restarts but dies
-// with the browser session (storage.session is cleared on browser exit).
+// Toolbar shares have an anchor tab. Settings shares enroll eligible tabs for
+// the browser session and stay up with an empty inventory. Stopping either
+// closes the tunneled relays and detaches the tabs enrolled by that grant.
+// chrome.storage.session preserves the grant across worker restarts and clears
+// it on browser exit.
 // ============================================================================
+
+type RemoteTunnelScope =
+  | { kind: 'tab'; anchorTabId: number; remoteTabIds: Set<number> }
+  | { kind: 'browser'; enrollment: BrowserEnrollment<'hosted'> }
 
 type RemoteTunnelRuntime = {
   tunnel: RemoteTunnel | TailcatTunnel
   tailcat?: boolean
   profile?: ServerProfile
   tunnelId: string
-  anchorTabId: number
-  /** Tabs attached because of the remote. Detached (left open) on stop. */
-  remoteTabIds: Set<number>
+  scope: RemoteTunnelScope
   status: string
 }
 let remoteTunnel: RemoteTunnelRuntime | null = null
+let browserRemoteCleanup: Promise<unknown> | undefined
+let settingsTransition: { kind: 'connecting' | 'disconnecting'; route: Route } | undefined
 let tailcatLogScopes = 0
 
 // Keep inherited diagnostics from serializing browser data during a public
@@ -432,7 +429,7 @@ const LOCAL_ACCESS_STOPPED = 'Local access was disconnected.'
 
 type TabGroup = Pick<TabInfo, 'groupTitle' | 'groupKey' | 'groupColor'>
 type BrowserTabOrigin = 'discovered' | 'created'
-type BrowserEnrollment = { tabs: Map<number, BrowserTabOrigin> }
+type BrowserEnrollment<R extends Route = 'local' | 'hosted'> = { route: R; tabs: Map<number, BrowserTabOrigin> }
 let browserEnrollment: BrowserEnrollment | undefined
 const ownedTabGroups = new Map<number, TabGroup>()
 
@@ -483,7 +480,7 @@ class ConnectionManager {
       this.legacyAccess =
         typeof allowed === 'boolean' ? allowed : __PLAYWRITER_AUTO_CONNECT_LOCAL__ || import.meta.env.TESTING
       restoreOwnedTabGroups(stored[OWNED_TAB_GROUPS_KEY])
-      if (stored[BROWSER_ACCESS_KEY] === true) browserEnrollment = { tabs: new Map() }
+      if (stored[BROWSER_ACCESS_KEY] === true) browserEnrollment = { route: 'local', tabs: new Map() }
     })
     .catch((error) => logger.debug('Could not restore Local access:', error))
   private transition: 'connecting' | 'disconnecting' | undefined
@@ -495,7 +492,7 @@ class ConnectionManager {
   }
 
   get allowsLocalAccess(): boolean {
-    return this.legacyAccess || browserEnrollment !== undefined
+    return this.legacyAccess || browserEnrollment?.route === 'local'
   }
 
   get allowsLegacyAccess(): boolean {
@@ -512,12 +509,12 @@ class ConnectionManager {
     if (!this.allowsLocalAccess) return { kind: 'disconnected' }
     if (this.ws?.readyState !== WebSocket.OPEN || this.connectionPromise) return { kind: 'reconnecting' }
     const tabs = Array.from(store.getState().tabs.values()).filter((tab) => tab.state === 'connected').length
-    return { kind: 'connected', scope: browserEnrollment ? 'browser' : 'tab', tabs }
+    return { kind: 'connected', scope: browserEnrollment?.route === 'local' ? 'browser' : 'tab', tabs }
   }
 
   async allowFromTab(): Promise<boolean> {
     await this.accessReady
-    if (this.transition) return false
+    if (this.transition || settingsTransition || browserEnrollment?.route === 'hosted') return false
     if (!this.legacyAccess) {
       const revocation = this.revocation
       await chrome.storage.session.set({ [LOCAL_ACCESS_KEY]: true })
@@ -532,8 +529,7 @@ class ConnectionManager {
     if (this.transition || browserEnrollment) return
     this.transition = 'connecting'
     try {
-      await stopRemoteForSettings()
-      browserEnrollment = { tabs: new Map() }
+      browserEnrollment = { route: 'local', tabs: new Map() }
       if (store.getState().connectionState === 'extension-replaced') {
         store.setState({ connectionState: 'idle', errorText: undefined })
       }
@@ -550,24 +546,25 @@ class ConnectionManager {
     }
   }
 
-  async disconnectFromSettings({ browserOnly = false } = {}): Promise<void> {
+  async disconnectFromSettings({ browserOnly = false, all = false } = {}): Promise<void> {
     await this.accessReady
     if (this.transition) return
-    if (browserOnly && !browserEnrollment) return
+    if (browserOnly && browserEnrollment?.route !== 'local') return
     this.transition = 'disconnecting'
     try {
-      await this.revokeAccess(browserEnrollment ? 'browser' : 'tab')
+      await this.revokeAccess(all ? 'all' : browserEnrollment?.route === 'local' ? 'browser' : 'tab')
     } finally {
       this.transition = undefined
     }
   }
 
-  private async revokeAccess(scope: 'browser' | 'tab'): Promise<void> {
-    const enrollment = browserEnrollment
-    if (scope === 'browser') browserEnrollment = undefined
-    else this.legacyAccess = false
+  private async revokeAccess(scope: 'browser' | 'tab' | 'all'): Promise<void> {
+    const enrollment = browserEnrollment?.route === 'local' ? browserEnrollment : undefined
+    if (scope !== 'tab' && enrollment) browserEnrollment = undefined
+    if (scope !== 'browser') this.legacyAccess = false
     const persisted = chrome.storage.session.set({
-      [scope === 'browser' ? BROWSER_ACCESS_KEY : LOCAL_ACCESS_KEY]: false,
+      ...(scope !== 'tab' && { [BROWSER_ACCESS_KEY]: false }),
+      ...(scope !== 'browser' && { [LOCAL_ACCESS_KEY]: false }),
     })
     if (this.allowsLocalAccess) {
       await Promise.all([persisted, withTimeout(detachBrowserTabs(enrollment), 3000, [])])
@@ -1068,11 +1065,9 @@ function sendToLocalRelay(message: any): void {
   }
 }
 
-function resolveTabGroupKey({ key, remote }: { key: string | undefined; remote: boolean }): string | undefined {
-  if (!key) {
-    return undefined
-  }
-  return remote ? namespaceRemoteTabGroupKey(key) : key
+function resolveTabGroupKey(key: string | undefined, runtime: RemoteTunnelRuntime | undefined): string | undefined {
+  // Browser-wide sessions use the relay-qualified owner key that Local uses.
+  return runtime?.scope.kind === 'tab' ? namespaceRemoteTabGroupKey(key) : key
 }
 
 // Fan CDP events out to tunneled relay connections. Responses never travel here:
@@ -1152,7 +1147,7 @@ async function dispatchRelayMessage(message: any, sink: RelayMessageSink): Promi
     try {
       const initialTabParams = message.params as CreateInitialTabParams | undefined
       const groupTitle = normalizeTabGroupTitle(initialTabParams?.tabGroup) || undefined
-      const groupKey = resolveTabGroupKey({ key: initialTabParams?.tabGroupKey, remote: Boolean(sink.remoteRuntime) })
+      const groupKey = resolveTabGroupKey(initialTabParams?.tabGroupKey, sink.remoteRuntime)
       const groupColor = normalizeTabGroupColor(initialTabParams?.tabGroupColor) || undefined
       logger.debug('Creating initial tab for Playwright client, group:', groupTitle || DEFAULT_TAB_GROUP_TITLE)
       assertActive()
@@ -1160,7 +1155,6 @@ async function dispatchRelayMessage(message: any, sink: RelayMessageSink): Promi
         url: 'about:blank',
         assertActive,
         group: { groupTitle, groupKey, groupColor },
-        remote: Boolean(sink.remoteRuntime),
       })
       if (tab.id) {
         assertActive()
@@ -1196,7 +1190,7 @@ async function dispatchRelayMessage(message: any, sink: RelayMessageSink): Promi
   // Toggled tabs and other sessions' tabs have another key or none, so they stay open.
   if (message.method === 'closeTabsForKey') {
     const params = message.params as { key?: string } | undefined
-    const key = resolveTabGroupKey({ key: params?.key, remote: Boolean(sink.remoteRuntime) })
+    const key = resolveTabGroupKey(params?.key, sink.remoteRuntime)
     if (!key) {
       sink.send({ id: message.id, error: 'closeTabsForKey requires a key' })
       return
@@ -1223,8 +1217,7 @@ async function dispatchRelayMessage(message: any, sink: RelayMessageSink): Promi
   // to serialize with sync.
   //
   // Ownership rules (group titles are NOT identities):
-  // - Keys from tunneled relays are namespaced (resolveTabGroupKey), so a remote
-  //   session "1" never owns the tabs of local session "1".
+  // - Legacy tunneled relays keep their existing tab group key namespace.
   // - Renaming FROM the shared default group only moves tabs created by the
   //   requesting session (`key`), never manually toggled or other sessions' tabs.
   // - Renaming a custom group moves everything currently titled `from` (that is
@@ -1245,7 +1238,7 @@ async function dispatchRelayMessage(message: any, sink: RelayMessageSink): Promi
           const from = normalizeTabGroupTitle(params?.from)
           const to = normalizeTabGroupTitle(params?.to)
           const remote = Boolean(sink.remoteRuntime)
-          const key = resolveTabGroupKey({ key: params?.key, remote })
+          const key = resolveTabGroupKey(params?.key, sink.remoteRuntime)
           const color = normalizeTabGroupColor(params?.color) || undefined
           if (!from || !to) {
             sink.send({ id: message.id, error: 'updateTabGroup requires non-empty from/to titles' })
@@ -1418,11 +1411,11 @@ const deferredBrowserTabs = new Set<number>()
 async function createTabInPreferredWindow(options: {
   url: string
   group: TabGroup
-  remote: boolean
   assertActive(): void
 }): Promise<chrome.tabs.Tab> {
+  const enrollment = browserEnrollment
   let windowId = await getPreferredWindowId()
-  if (browserEnrollment) {
+  if (enrollment) {
     const windows = (await chrome.windows.getAll({ windowTypes: ['normal'] })).filter((window) => !window.incognito)
     windowId = (windows.find((window) => window.id === windowId) ?? windows[0])?.id
     if (windowId === undefined) throw new Error('No regular browser window is available.')
@@ -1435,14 +1428,14 @@ async function createTabInPreferredWindow(options: {
     const { url } = options
     const tab = await chrome.tabs.create({ url, active: false, windowId }).catch((error: unknown) => {
       options.assertActive()
-      if (browserEnrollment) throw error
+      if (enrollment) throw error
       logger.debug('Could not create tab in preferred window, falling back:', error)
       return chrome.tabs.create({ url, active: false })
     })
     options.assertActive()
     if (tab.id !== undefined) {
-      if (browserEnrollment && !options.remote && !connectionManager.allowsLegacyAccess) {
-        browserEnrollment.tabs.set(tab.id, 'created')
+      if (enrollment && (enrollment.route === 'hosted' || !connectionManager.allowsLegacyAccess)) {
+        enrollment.tabs.set(tab.id, 'created')
       }
       // onCreated can precede the create() result. Set the owner before any
       // browser-wide enrollment can attach and announce this tab.
@@ -1827,7 +1820,7 @@ async function handleCommand(
       // The session's tab group title + owning session key travel on the
       // forwarded command (relay fills them from the client connection).
       const groupTitle = normalizeTabGroupTitle(msg.params.tabGroup) || undefined
-      const groupKey = resolveTabGroupKey({ key: msg.params.tabGroupKey, remote: Boolean(remoteRuntime) })
+      const groupKey = resolveTabGroupKey(msg.params.tabGroupKey, remoteRuntime)
       const groupColor = normalizeTabGroupColor(msg.params.tabGroupColor) || undefined
       logger.debug('Creating new tab with URL:', url, 'group:', groupTitle || DEFAULT_TAB_GROUP_TITLE)
       assertActive()
@@ -1835,7 +1828,6 @@ async function handleCommand(
         url,
         assertActive,
         group: { groupTitle, groupKey, groupColor },
-        remote: Boolean(remoteRuntime),
       })
       if (!tab.id) throw new Error('Failed to create tab')
       assertActive()
@@ -2267,6 +2259,7 @@ async function attachTabDebugger(
   const assertTabActive = () => {
     assertActive?.()
     if (
+      (enrollment?.route === 'hosted' && !origin) ||
       (origin &&
         (!store.getState().tabs.has(tabId) || (enrollment !== browserEnrollment && enrollment?.tabs.has(tabId)))) ||
       (startedWithoutRemote && revocation !== connectionManager.revocation)
@@ -2496,11 +2489,11 @@ function syncToolbarState(tabId: number): void {
     .executeScript({
       target: { tabId, allFrames: false },
       world: 'ISOLATED',
-      func: (recording: boolean, remoteActive: boolean, tailcat: boolean) => {
+      func: (recording: boolean, remoteActive: boolean, tailcat: boolean, browserWide: boolean) => {
         window.__playwriterToolbarSetRecording?.(recording)
-        window.__playwriterToolbarSetRemote?.(remoteActive, tailcat)
+        window.__playwriterToolbarSetRemote?.(remoteActive, tailcat, browserWide)
       },
-      args: [recorderActive, remoteTunnel !== null, Boolean(remoteTunnel?.tailcat)],
+      args: [recorderActive, remoteTunnel !== null, Boolean(remoteTunnel?.tailcat), remoteTunnel?.scope.kind === 'browser'],
     })
     .catch(() => {})
 }
@@ -2537,10 +2530,10 @@ function setRemoteStateInAllTabs(active: boolean): void {
       .executeScript({
         target: { tabId, allFrames: false },
         world: 'ISOLATED',
-        func: (on: boolean, tailcat: boolean) => {
-          window.__playwriterToolbarSetRemote?.(on, tailcat)
+        func: (on: boolean, tailcat: boolean, browserWide: boolean) => {
+          window.__playwriterToolbarSetRemote?.(on, tailcat, browserWide)
         },
-        args: [active, Boolean(remoteTunnel?.tailcat)],
+        args: [active, Boolean(remoteTunnel?.tailcat), remoteTunnel?.scope.kind === 'browser'],
       })
       .catch(() => {})
   }
@@ -2563,6 +2556,10 @@ async function connectTab(
   tabId: number,
   options?: { groupTitle?: string; groupKey?: string; groupColor?: chrome.tabGroups.ColorEnum },
 ): Promise<void> {
+  if (browserEnrollment?.route === 'hosted') {
+    await reconcileBrowserTab(tabId)
+    return
+  }
   if (!connectionManager.allowsLocalAccess && remoteTunnel === null) return
   const revocation = connectionManager.revocation
   try {
@@ -2733,25 +2730,31 @@ async function disconnectEverything(): Promise<void> {
 
 const REMOTE_TUNNEL_STORAGE_KEY = 'playwriterRemoteTunnel'
 
-type PersistedRemoteTunnel = { anchorTabId: number; tunnelId: string; remoteTabIds: number[] }
+type PersistedRemoteTunnel =
+  | { scope: 'browser'; tunnelId: string }
+  | { anchorTabId: number; tunnelId: string; remoteTabIds: number[] }
 
-function persistRemoteTunnel(): void {
-  const entry: PersistedRemoteTunnel | null =
-    remoteTunnel && !remoteTunnel.tailcat
-      ? {
-          anchorTabId: remoteTunnel.anchorTabId,
-          tunnelId: remoteTunnel.tunnelId,
-          remoteTabIds: Array.from(remoteTunnel.remoteTabIds),
-        }
-      : null
-  void chrome.storage.session.set({ [REMOTE_TUNNEL_STORAGE_KEY]: entry }).catch(() => {})
+function persistRemoteTunnel(): Promise<void> {
+  let entry: PersistedRemoteTunnel | null = null
+  if (remoteTunnel && !remoteTunnel.tailcat) {
+    const { scope, tunnelId } = remoteTunnel
+    entry =
+      scope.kind === 'browser'
+        ? { scope: 'browser', tunnelId }
+        : { anchorTabId: scope.anchorTabId, tunnelId, remoteTabIds: Array.from(scope.remoteTabIds) }
+  }
+  return chrome.storage.session.set({ [REMOTE_TUNNEL_STORAGE_KEY]: entry }).catch(() => {
+    logger.debug('Could not save remote sharing state')
+  })
 }
 
 const REMOTE_CONTROL_STOPPED_ERROR = 'Remote control was stopped by the user.'
 
 /** Tabs whose popups and children belong to the remote: the anchor and tabs it opened. */
 function isRemoteOwnedTab({ runtime, tabId }: { runtime: RemoteTunnelRuntime; tabId: number }): boolean {
-  return tabId === runtime.anchorTabId || runtime.remoteTabIds.has(tabId)
+  return runtime.scope.kind === 'browser'
+    ? runtime.scope.enrollment.tabs.has(tabId)
+    : tabId === runtime.scope.anchorTabId || runtime.scope.remoteTabIds.has(tabId)
 }
 
 // Attach a tab on behalf of a remote runtime and track it so Stop sharing
@@ -2769,9 +2772,10 @@ async function attachForRemote<T>({
   if (remoteTunnel !== runtime) {
     throw new Error(REMOTE_CONTROL_STOPPED_ERROR)
   }
-  if (!runtime.remoteTabIds.has(tabId)) {
-    runtime.remoteTabIds.add(tabId)
-    persistRemoteTunnel()
+  if (runtime.scope.kind === 'browser') return attach()
+  if (!runtime.scope.remoteTabIds.has(tabId)) {
+    runtime.scope.remoteTabIds.add(tabId)
+    void persistRemoteTunnel()
   }
   const result = await attach()
   if (remoteTunnel !== runtime) {
@@ -2783,15 +2787,15 @@ async function attachForRemote<T>({
 
 // Anchor tab gone → revoke the link. Any other tab just leaves the cleanup set.
 function forgetRemoteTab(tabId: number): void {
-  if (remoteTunnel === null) {
+  if (remoteTunnel?.scope.kind !== 'tab') {
     return
   }
-  if (remoteTunnel.anchorTabId === tabId) {
+  if (remoteTunnel.scope.anchorTabId === tabId) {
     stopRemoteControl()
     return
   }
-  if (remoteTunnel.remoteTabIds.delete(tabId)) {
-    persistRemoteTunnel()
+  if (remoteTunnel.scope.remoteTabIds.delete(tabId)) {
+    void persistRemoteTunnel()
   }
 }
 
@@ -2801,15 +2805,17 @@ function forgetRemoteTab(tabId: number): void {
 async function announceConnectedTabs({
   send,
   firstTabId,
+  enrollment,
 }: {
   send(message: any): void
   firstTabId?: number
+  enrollment?: BrowserEnrollment
 }): Promise<void> {
   const tabs = Array.from(store.getState().tabs.entries()).sort(([a], [b]) => {
     return Number(b === firstTabId) - Number(a === firstTabId)
   })
   for (const [tabId, tab] of tabs) {
-    if (tab.state !== 'connected' || !tab.sessionId) {
+    if (tab.state !== 'connected' || !tab.sessionId || (enrollment && !enrollment.tabs.has(tabId))) {
       continue
     }
     try {
@@ -2819,6 +2825,7 @@ async function announceConnectedTabs({
       )) as Protocol.Target.GetTargetInfoResponse
       const current = store.getState().tabs.get(tabId)
       if (current?.state !== 'connected' || current.sessionId !== tab.sessionId) continue
+      if (enrollment && enrollment !== browserEnrollment) return
       const origin = browserEnrollment?.tabs.get(tabId)
       if (origin && !isBrowserTabUrl(result.targetInfo.url, origin)) {
         void dropBrowserTab(tabId)
@@ -2899,7 +2906,7 @@ async function reattachConnectingTabsToLocalRelay(assertActive: () => void): Pro
 
 // Introduce the extension without exposing local profile identity, then announce
 // every attached tab (anchor first) to the freshly connected tunneled relay.
-async function sendRemoteHelloAndTargets(conn: { send(message: any): void }): Promise<void> {
+async function sendRemoteHelloAndTargets(conn: { send(message: any): void }, scope: RemoteTunnelScope): Promise<void> {
   const browser = await detectBrowserName().catch(() => {
     return undefined
   })
@@ -2909,20 +2916,28 @@ async function sendRemoteHelloAndTargets(conn: { send(message: any): void }): Pr
       version: typeof __PLAYWRITER_VERSION__ !== 'undefined' ? __PLAYWRITER_VERSION__ : undefined,
     }),
   )
-  await announceConnectedTabs({ send: conn.send, firstTabId: remoteTunnel?.anchorTabId })
+  if (scope.kind === 'tab') {
+    await announceConnectedTabs({ send: conn.send, firstTabId: scope.anchorTabId })
+  } else {
+    await announceConnectedTabs({ send: conn.send, enrollment: scope.enrollment })
+    conn.send({ method: 'ready' })
+  }
+}
+
+type RemoteStartOptions = {
+  tunnelId?: string
+  remoteTabIds?: number[]
+  tailcat?: boolean
+  profile?: ServerProfile
+  deadline?: number
 }
 
 async function startRemoteControl(
   anchorTabId: number,
-  options: {
-    tunnelId?: string
-    remoteTabIds?: number[]
-    tailcat?: boolean
-    profile?: ServerProfile
-    deadline?: number
-  } = {},
+  options: RemoteStartOptions = {},
 ): Promise<{ url: string; started: boolean; id: string }> {
   if (
+    settingsTransition ||
     connectionManager.changingLocalAccess ||
     tailcatStopping ||
     tailcatCleanupFailed ||
@@ -2931,6 +2946,7 @@ async function startRemoteControl(
     throw new Error('Sharing transition in progress')
   }
   if (remoteTunnel) {
+    if (remoteTunnel.scope.kind === 'browser') throw new Error('Manage browser-wide sharing in Connection settings')
     setRemoteStateInAllTabs(true)
     return { url: remoteTunnel.tunnel.url, started: false, id: remoteTunnel.tunnelId }
   }
@@ -2940,8 +2956,17 @@ async function startRemoteControl(
     await connectionManager.disconnectFromSettings({ browserOnly: true })
     if (browserEnrollment || connectionManager.changingLocalAccess) throw new Error('Sharing transition in progress')
   }
+  await browserRemoteCleanup
+  if (settingsTransition || remoteTunnel) throw new Error('Sharing transition in progress')
+  return startRemoteTunnel({ kind: 'tab', anchorTabId, remoteTabIds: new Set() }, options)
+}
 
+async function startRemoteTunnel(scope: RemoteTunnelScope, options: RemoteStartOptions = {}) {
   const tunnelId = options.tunnelId || generateTunnelId()
+  let markOnline: () => void = () => {}
+  const online = new Promise<boolean>((resolve) => {
+    markOnline = () => resolve(true)
+  })
   const Tunnel = options.tailcat ? TailcatTunnel : RemoteTunnel
   const tunnel = new Tunnel({
     profile: options.profile,
@@ -2968,10 +2993,12 @@ async function startRemoteControl(
               ? 'disconnected'
               : 'starting'
           : status
+        if (status === 'online') markOnline()
       }
       logger.debug('Remote tunnel status:', status, detail || '')
     },
     onConnectionOpen: (virtualConn) => {
+      if (remoteTunnel !== runtime) return null
       let active = true
       const connKey = `${tunnelId}:${virtualConn.id}`
       const conn = {
@@ -2986,7 +3013,7 @@ async function startRemoteControl(
         },
       }
       remoteRelayConnections.set(connKey, conn)
-      void sendRemoteHelloAndTargets(conn)
+      void sendRemoteHelloAndTargets(conn, scope)
         .then(() => {
           if (active && remoteTunnel === runtime && runtime.tailcat) runtime.status = 'connected'
         })
@@ -3018,8 +3045,7 @@ async function startRemoteControl(
   const runtime: RemoteTunnelRuntime = {
     tunnel,
     tunnelId,
-    anchorTabId,
-    remoteTabIds: new Set(),
+    scope,
     status: options.tailcat ? 'starting' : 'connecting',
     tailcat: options.tailcat,
     profile: options.profile,
@@ -3027,6 +3053,20 @@ async function startRemoteControl(
   // Set before attaching so the maintain loop and relay-close handling keep
   // these tabs 'connected' without a local relay: the tunnel is the consumer.
   remoteTunnel = runtime
+  if (scope.kind === 'browser') {
+    browserEnrollment = scope.enrollment
+    void enrollBrowserTabs()
+    tunnel.start()
+    updateSharingMenus()
+    setRemoteStateInAllTabs(true)
+    if (!options.tunnelId && !(await withTimeout(online, 10_000, false))) {
+      throw new Error('Hosted tunnel startup timed out')
+    }
+    if (remoteTunnel !== runtime) throw new Error(REMOTE_CONTROL_STOPPED_ERROR)
+    await persistRemoteTunnel()
+    return { url: tunnel.url, started: true, id: tunnelId }
+  }
+  const { anchorTabId } = scope
   if (runtime.tailcat) tailcatFailure = null
   updateSharingMenus()
   // The tunnel is the consumer, so the anchor attaches even without a local relay.
@@ -3080,7 +3120,7 @@ async function startRemoteControl(
   }
 
   tunnel.start()
-  persistRemoteTunnel()
+  void persistRemoteTunnel()
   updateSharingMenus()
   setRemoteStateInAllTabs(true)
   logger.log('Remote control started, anchor tab', anchorTabId)
@@ -3119,8 +3159,18 @@ function stopRemoteControl(): boolean {
     )
     void tailcatDisposal.catch(() => {})
   }
-  persistRemoteTunnel()
-  for (const tabId of runtime.remoteTabIds) {
+  const persisted = persistRemoteTunnel()
+  if (runtime.scope.kind === 'browser') {
+    const { enrollment } = runtime.scope
+    if (browserEnrollment === enrollment) browserEnrollment = undefined
+    recorderActive = false
+    skillRecordingId = null
+    setRecorderStateInAllTabs(false)
+    store.setState({ connectionState: 'idle', errorText: undefined })
+    browserRemoteCleanup = Promise.all([persisted, withTimeout(detachBrowserTabs(enrollment), 3000, [])])
+    return true
+  }
+  for (const tabId of runtime.scope.remoteTabIds) {
     detachTab(tabId, true)
   }
   // Tabs kept 'connected' only for the tunnel go back to waiting for the local relay.
@@ -3131,7 +3181,7 @@ function stopRemoteControl(): boolean {
       return { tabs: replaced ? new Map() : markAllTabsConnecting(state.tabs) }
     })
   }
-  logger.log('Remote control stopped, anchor tab', runtime.anchorTabId)
+  logger.log('Remote control stopped, anchor tab', runtime.scope.anchorTabId)
   return true
 }
 
@@ -3140,10 +3190,23 @@ function stopRemoteControl(): boolean {
 async function restoreRemoteTunnelAfterRestart(): Promise<void> {
   try {
     const stored = await chrome.storage.session.get(REMOTE_TUNNEL_STORAGE_KEY)
-    const entry = stored[REMOTE_TUNNEL_STORAGE_KEY] as PersistedRemoteTunnel | null | undefined
-    if (!entry) {
+    const entry: unknown = stored[REMOTE_TUNNEL_STORAGE_KEY]
+    if (
+      !entry ||
+      typeof entry !== 'object' ||
+      !('tunnelId' in entry) ||
+      typeof entry.tunnelId !== 'string' ||
+      !/^[a-z0-9-]{1,63}$/.test(entry.tunnelId)
+    ) {
       return
     }
+    if ('scope' in entry && entry.scope === 'browser') {
+      await startRemoteTunnel({ kind: 'browser', enrollment: { route: 'hosted', tabs: new Map() } }, {
+        tunnelId: entry.tunnelId,
+      })
+      return
+    }
+    if (!('anchorTabId' in entry) || typeof entry.anchorTabId !== 'number') return
     const tabExists = (tabId: number): Promise<boolean> => {
       return chrome.tabs.get(tabId).then(
         () => true,
@@ -3151,11 +3214,13 @@ async function restoreRemoteTunnelAfterRestart(): Promise<void> {
       )
     }
     if (!(await tabExists(entry.anchorTabId))) {
-      persistRemoteTunnel()
+      await persistRemoteTunnel()
       return
     }
+    const remoteTabIds: unknown = 'remoteTabIds' in entry ? entry.remoteTabIds : undefined
     const existing = await Promise.all(
-      (entry.remoteTabIds || []).map(async (tabId) => {
+      (Array.isArray(remoteTabIds) ? remoteTabIds : []).map(async (tabId: unknown) => {
+        if (typeof tabId !== 'number') return undefined
         return (await tabExists(tabId)) ? tabId : undefined
       }),
     )
@@ -3163,9 +3228,10 @@ async function restoreRemoteTunnelAfterRestart(): Promise<void> {
       tunnelId: entry.tunnelId,
       remoteTabIds: existing.filter(isTruthy),
     })
-  } catch (error) {
-    logger.error('Failed to restore remote control:', error)
-    persistRemoteTunnel()
+  } catch {
+    logger.error('Failed to restore remote control')
+    if (remoteTunnel?.scope.kind === 'browser') stopRemoteControl()
+    else await persistRemoteTunnel()
   }
 }
 
@@ -3177,14 +3243,14 @@ async function startRemoteControlForActiveTab(): Promise<{ url: string }> {
 }
 
 function getRemoteControlState(): { anchorTabId: number; url: string; status: string; remoteTabIds: number[] } | null {
-  if (remoteTunnel === null) {
+  if (remoteTunnel?.scope.kind !== 'tab') {
     return null
   }
   return {
-    anchorTabId: remoteTunnel.anchorTabId,
+    anchorTabId: remoteTunnel.scope.anchorTabId,
     url: remoteTunnel.tunnel.url,
     status: remoteTunnel.status,
-    remoteTabIds: Array.from(remoteTunnel.remoteTabIds),
+    remoteTabIds: Array.from(remoteTunnel.scope.remoteTabIds),
   }
 }
 
@@ -3267,12 +3333,12 @@ function detachBrowserTabs(enrollment: BrowserEnrollment | undefined) {
 
 async function reconcileBrowserTab(tabId: number): Promise<void> {
   const enrollment = browserEnrollment
-  if (!enrollment || connectionManager.ws?.readyState !== WebSocket.OPEN) return
+  if (!enrollment || !canEnrollBrowserTabs(enrollment)) return
   try {
     await debuggerReset
     const tab = await chrome.tabs.get(tabId)
     const win = await chrome.windows.get(tab.windowId)
-    if (enrollment !== browserEnrollment || connectionManager.ws?.readyState !== WebSocket.OPEN) return
+    if (!canEnrollBrowserTabs(enrollment)) return
     const currentTabs = store.getState().tabs
     const current = currentTabs.get(tabId)
     const sourceId = popupSourceTabMap.get(tabId) ?? tab.openerTabId
@@ -3303,7 +3369,11 @@ async function reconcileBrowserTab(tabId: number): Promise<void> {
     enrollment.tabs.set(tabId, origin)
     setTabConnecting(tabId, group)
     try {
-      await attachTab(tabId)
+      await attachTab(tabId, {
+        assertActive: () => {
+          if (enrollment !== browserEnrollment) throw new Error('Browser connection stopped')
+        },
+      })
     } catch (error) {
       if (enrollment === browserEnrollment) await dropBrowserTab(tabId)
       logger.debug('Could not enroll browser tab:', tabId, error)
@@ -3311,6 +3381,13 @@ async function reconcileBrowserTab(tabId: number): Promise<void> {
   } catch (error) {
     logger.debug('Could not check browser tab:', tabId, error)
   }
+}
+
+function canEnrollBrowserTabs(enrollment: BrowserEnrollment): boolean {
+  if (enrollment !== browserEnrollment) return false
+  return enrollment.route === 'local'
+    ? connectionManager.ws?.readyState === WebSocket.OPEN
+    : remoteTunnel?.scope.kind === 'browser' && remoteTunnel.scope.enrollment === enrollment
 }
 
 async function enrollBrowserTabs(): Promise<void> {
@@ -3441,7 +3518,9 @@ async function updateIcons(): Promise<void> {
       if (connectionState === 'extension-replaced' && errorText) return errorText
       if (tabInfo?.errorText) return tabInfo.errorText
       if (tabId !== undefined && tabInfo?.state === 'connected' && browserEnrollment?.tabs.has(tabId)) {
-        return 'Connected through settings - Click to also connect this tab'
+        return browserEnrollment.route === 'local'
+          ? 'Connected through settings - Click to also connect this tab'
+          : 'Connected through settings'
       }
       return iconConfig.title
     })()
@@ -3526,6 +3605,10 @@ async function onActionClicked(tab: chrome.tabs.Tab): Promise<void> {
   const { tabs, connectionState } = store.getState()
   const tabInfo = tabs.get(tab.id)
   const enrollment = browserEnrollment
+  if (enrollment?.route === 'hosted') {
+    void reconcileBrowserTab(tab.id)
+    return
+  }
   if (tabInfo?.state === 'connected' && enrollment?.tabs.has(tab.id)) {
     if ((await connectionManager.allowFromTab()) && enrollment === browserEnrollment) {
       enrollment.tabs.delete(tab.id)
@@ -3569,10 +3652,8 @@ chrome.debugger.onDetach.addListener(onDebuggerDetach)
 
 // resetDebugger detaches everything, so remote tabs must be restored after it.
 const debuggerReset = resetDebugger().catch((error) => logger.debug('Could not reset browser debuggers:', error))
-void debuggerReset
-  .then(() => {
-    return restoreRemoteTunnelAfterRestart()
-  })
+const remoteRestore = debuggerReset.then(restoreRemoteTunnelAfterRestart)
+void remoteRestore
   .finally(() => {
     // Startup sync: clean leftover managed groups from a previous SW/browser
     // session (Chrome session restore can bring groups back while nothing is
@@ -3699,13 +3780,14 @@ function updateContextMenuVisibility(): void {
 function updateSharingMenus(): void {
   const sharing = remoteTunnel !== null || tailcatStarting
   const tailcat = Boolean(remoteTunnel?.tailcat) || tailcatStarting
+  const canCopy = sharing && remoteTunnel?.scope.kind !== 'browser'
   updateMenus([
     [MENU.separator, { visible: sharing }],
-    [MENU.copyRemotePrompt, { visible: sharing && !tailcat }],
+    [MENU.copyRemotePrompt, { visible: canCopy && !tailcat }],
     [
       MENU.copyRemoteId,
       {
-        visible: sharing,
+        visible: canCopy,
         title: tailcat
           ? 'Copy connection information for selected DERP'
           : 'Copy remote id (secret, gives full browser access)',
@@ -3922,6 +4004,7 @@ async function copyRemoteText(options: { tabId: number; kind: 'prompt' | 'id' })
     await toastTab(options.tabId, 'Remote control is not active')
     return
   }
+  if (runtime.scope.kind === 'browser') return
   const text = runtime.tailcat
     ? runtime.tunnel.url
     : options.kind === 'prompt'
@@ -4579,55 +4662,102 @@ function playSound(sound: SoundName): void {
     })
 }
 
-let localSettingsError = ''
+let connectionSettingsError = ''
 
 async function stopRemoteForSettings(): Promise<void> {
   if (remoteTunnel || tailcatStarting) stopRemoteControl()
   if (tailcatStopping) await tailcatDisposal
+  await browserRemoteCleanup
 }
 
 async function getSettingsConnection(): Promise<ActiveConnection> {
+  if (settingsTransition) return { kind: 'transition', phase: settingsTransition.kind, route: settingsTransition.route }
   const local = await connectionManager.localStatus()
-  if (!remoteTunnel || local.kind === 'connecting' || local.kind === 'disconnecting') return local
-  const { tailcat, status } = remoteTunnel
+  if (!remoteTunnel) return local
+  const { scope, tailcat, status } = remoteTunnel
+  const online = status === 'online' || status === 'ready' || status === 'connected'
+  if (scope.kind === 'browser') {
+    const tabs = Array.from(scope.enrollment.tabs.keys()).filter(
+      (tabId) => store.getState().tabs.get(tabId)?.state === 'connected',
+    ).length
+    return { kind: 'remote', route: scope.enrollment.route, scope: 'browser', online, tabs }
+  }
   return {
     kind: 'remote',
     route: tailcat ? 'tailcat' : 'hosted',
-    online: status === 'online' || status === 'ready' || status === 'connected',
+    scope: 'tab',
+    online,
   }
 }
 
 async function handleConnectionSettings(request: ConnectionRequest): Promise<ConnectionReply> {
   const preferences = await getConnectionPreferences(request)
+  await remoteRestore
   switch (request.kind) {
     case 'status':
       break
     case 'select':
     case 'select-server':
-      localSettingsError = ''
+      connectionSettingsError = ''
       break
-    case 'connect':
-      if (preferences.pending.route !== 'local') {
+    case 'copy-command': {
+      const runtime = remoteTunnel
+      if (settingsTransition || runtime?.scope.kind !== 'browser' || runtime.status !== 'online') {
+        return { kind: 'error', message: 'The browser-wide connection is unavailable.' }
+      }
+      return { kind: 'command', command: `playwriter session new --remote ${runtime.tunnelId}` }
+    }
+    case 'connect': {
+      const { route } = preferences.pending
+      if (route === 'tailcat') {
         return { kind: 'error', message: 'The selected route is unavailable in Connection settings.' }
       }
-      localSettingsError = ''
+      if (route === 'hosted' && request.confirmedRoute !== 'hosted') {
+        return { kind: 'error', message: 'Confirm browser sharing before connecting.' }
+      }
+      if (request.confirmedRoute && request.confirmedRoute !== route) {
+        return { kind: 'error', message: 'The selected route changed. Choose a route and try again.' }
+      }
+      if (settingsTransition || browserEnrollment?.route === route) break
+      connectionSettingsError = ''
+      settingsTransition = { kind: 'connecting', route }
       try {
-        await connectionManager.connectFromSettings()
-      } catch (error) {
-        logger.debug('Could not connect from settings:', error)
-        localSettingsError = 'Could not reach the local relay. Start Playwriter on this computer and try again.'
-      }
-      break
-    case 'disconnect':
-      localSettingsError = ''
-      if (remoteTunnel || tailcatStarting) {
         await stopRemoteForSettings()
-      } else {
-        await connectionManager.disconnectFromSettings()
+        if (route === 'local') {
+          await connectionManager.connectFromSettings()
+        } else {
+          await connectionManager.disconnectFromSettings({ all: true })
+          await startRemoteTunnel({ kind: 'browser', enrollment: { route, tabs: new Map() } })
+        }
+      } catch {
+        if (route === 'hosted') await stopRemoteForSettings()
+        connectionSettingsError =
+          route === 'local'
+            ? 'Could not reach the local relay. Start Playwriter on this computer and try again.'
+            : 'Could not connect through playwriter.dev. Try again.'
+      } finally {
+        settingsTransition = undefined
       }
       break
+    }
+    case 'disconnect': {
+      if (settingsTransition) break
+      const route = remoteTunnel ? (remoteTunnel.tailcat ? 'tailcat' : 'hosted') : 'local'
+      connectionSettingsError = ''
+      settingsTransition = { kind: 'disconnecting', route }
+      try {
+        if (remoteTunnel || tailcatStarting) {
+          await stopRemoteForSettings()
+        } else {
+          await connectionManager.disconnectFromSettings()
+        }
+      } finally {
+        settingsTransition = undefined
+      }
+      break
+    }
   }
-  return { kind: 'status', preferences, connection: await getSettingsConnection(), error: localSettingsError }
+  return { kind: 'status', preferences, connection: await getSettingsConnection(), error: connectionSettingsError }
 }
 
 // Handle messages from the in-page toolbar
@@ -4762,6 +4892,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       if (
         remoteTunnel ||
+        settingsTransition ||
         tailcatStarting ||
         tailcatChanging ||
         tailcatStopping ||

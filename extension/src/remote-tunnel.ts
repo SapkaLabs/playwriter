@@ -87,6 +87,7 @@ export class RemoteTunnel {
     this.ws = socket
 
     socket.onmessage = (event: MessageEvent) => {
+      if (this.closed || this.ws !== socket) return
       const raw = typeof event.data === 'string' ? event.data : ''
       let msg: TraforoUpstreamMessage
       try {
@@ -107,6 +108,7 @@ export class RemoteTunnel {
     }
 
     socket.onclose = (event: CloseEvent) => {
+      if (this.ws !== socket) return
       this.stopPing()
       this.ws = null
       this.closeAllConnections()
@@ -144,6 +146,7 @@ export class RemoteTunnel {
     }
 
     socket.onerror = () => {
+      if (this.ws !== socket) return
       // onclose fires right after and handles reconnection
       this.options.logger.debug('Remote tunnel WebSocket error')
     }

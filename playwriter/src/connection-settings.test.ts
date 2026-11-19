@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { once } from 'node:events'
-import { mkdtemp, rm } from 'node:fs/promises'
-import { createRequire } from 'node:module'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { createRequire, stripTypeScriptTypes } from 'node:module'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -9,10 +9,11 @@ import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { chromium, type BrowserContext } from '@xmorse/playwright-core'
 import { expect, test } from 'vitest'
-import { WebSocketServer } from 'ws'
+import { WebSocket as NodeWebSocket, WebSocketServer } from 'ws'
 import { startPlayWriterCDPRelayServer } from './cdp-relay.js'
 import { createCdpLogger } from './cdp-log.js'
 import { createFileLogger } from './create-logger.js'
+import { parseRemoteControlUrl } from './remote-control.js'
 import { createSimpleServer } from './test-utils.js'
 
 const exec = promisify(execFile)
@@ -155,6 +156,303 @@ async function withSettings(
     await rm(directory, { recursive: true, force: true, maxRetries: 5 })
   }
 }
+
+async function startHostedTransportFixture() {
+  const website = join(root, 'website')
+  const websiteRequire = createRequire(join(website, 'package.json'))
+  const wranglerRequire = createRequire(websiteRequire.resolve('wrangler/package.json'))
+  const { Miniflare, convertV4MiniflareOptions } = wranglerRequire('miniflare')
+  const workerSource = await readFile(join(website, 'src/remote-control-tunnel.ts'), 'utf8')
+  const worker = new Miniflare(
+    convertV4MiniflareOptions({
+      host: '127.0.0.1',
+      port: 0,
+      cf: false,
+      modules: true,
+      script:
+        stripTypeScriptTypes(workerSource) +
+        `
+      export default {
+        async fetch(request, env) {
+          return await routeRemoteControlRequest({ request, env }) ?? new Response(null, { status: 404 })
+        }
+      }`,
+      durableObjects: { REMOTE_CONTROL_TUNNEL: 'RemoteControlTunnel' },
+      ratelimits: { REMOTE_CONTROL_RATE_LIMITER: { namespace_id: '1', simple: { limit: 100, period: 60 } } },
+    }),
+  )
+  try {
+    const { host }: URL = await worker.ready
+    return {
+      origin: `ws://${host}`,
+      close: (): Promise<void> => worker.dispose(),
+    }
+  } catch {
+    await worker.dispose()
+    throw new Error('Could not start the loopback hosted tunnel worker')
+  }
+}
+
+async function redirectHostedTransport(worker: Awaited<ReturnType<typeof getServiceWorker>>, origin: string) {
+  await worker.evaluate((base) => {
+    const ChromeWebSocket = WebSocket
+    globalThis.WebSocket = class extends ChromeWebSocket {
+      constructor(...[url, protocols]: ConstructorParameters<typeof ChromeWebSocket>) {
+        const target = new URL(url)
+        super(
+          target.hostname === 'playwriter.dev' && target.pathname.startsWith('/tunnel/')
+            ? new URL(target.pathname, base)
+            : url,
+          protocols,
+        )
+      }
+    }
+  }, origin)
+}
+
+async function copyHostedCredential(settings: Awaited<ReturnType<typeof openSettings>>['settings']): Promise<string> {
+  await settings.getByRole('button', { name: 'Copy CLI command' }).click()
+  await settings.getByText('Copied command', { exact: true }).waitFor()
+  const command: unknown = await settings.evaluate(() => Reflect.get(navigator, 'clipboard').readText())
+  const id = typeof command === 'string' && /^playwriter session new --remote ([a-z0-9-]{1,63})$/.exec(command)?.[1]
+  if (!id) throw new Error('Settings did not copy the supported remote CLI command')
+  expect((await settings.locator('body').innerText()).includes(id)).toBe(false)
+  return id
+}
+
+async function expectRevoked(credential: string): Promise<void> {
+  const { wsUrl } = parseRemoteControlUrl(credential)
+  await expect
+    .poll(
+      () =>
+        new Promise<number>((resolve) => {
+          const socket = new NodeWebSocket(wsUrl, { handshakeTimeout: 5000 })
+          const timer = setTimeout(() => socket.terminate(), 5000)
+          socket.once('error', () => resolve(-1))
+          socket.once('close', (code) => {
+            clearTimeout(timer)
+            resolve(code)
+          })
+        }),
+      { timeout: 10_000 },
+    )
+    .toBe(4008)
+}
+
+const hostedTransports = process.env.PLAYWRITER_TEST_LIVE_HOSTED === '1' ? ['loopback', 'playwriter.dev'] : ['loopback']
+
+test.each(hostedTransports)(
+  'Connect playwriter.dev replaces grants and keeps CLI access across tabs on %s',
+  async (transport) => {
+    const edge = transport === 'loopback' ? await startHostedTransportFixture() : undefined
+    const fixture = await createSimpleServer({
+      routes: {
+        '/first': '<title>First fixture</title>',
+        '/second': '<title>Second fixture</title>',
+        '/owned': '<title>Owned fixture</title><a href="/popup" target="_blank">Open fixture popup</a>',
+        '/popup': '<title>Popup fixture</title>',
+      },
+    })
+    try {
+      await withSettings(
+        async ({ browser, serviceWorker, settings, status, route, connect, cli, restart }) => {
+          // Keep the credential inside the isolated browser and test process.
+          await browser.addInitScript(() => {
+            let text = ''
+            Object.defineProperty(navigator, 'clipboard', {
+              value: {
+                writeText: async (value: string) => {
+                  text = value
+                },
+                readText: async () => text,
+              },
+            })
+          })
+          await settings.reload()
+          const url = (path: string) => new URL(path, fixture.baseUrl).href
+          const first = await browser.newPage()
+          await first.goto(url('/first'))
+          const windowTab = browser.waitForEvent('page')
+          await serviceWorker.evaluate(async (url) => {
+            await chrome.windows.create({ url, type: 'normal' })
+          }, url('/second'))
+          const second = await windowTab
+          await second.waitForLoadState()
+          await first.bringToFront()
+          await serviceWorker.evaluate(() => globalThis.toggleExtensionForActiveTab())
+          await connect.click()
+          await status.getByText('2 attached tabs', { exact: true }).waitFor()
+
+          async function session(group: string, credential?: string) {
+            const args = credential ? ['--remote', credential] : []
+            const created = await cli('session', 'new', '--tab-group', group, ...args)
+            const id = /Session (\d+) created/.exec(created.stdout)?.[1]
+            if (!created.ok || !id) throw new Error(`CLI could not start the ${group} session`)
+            return (code: string) => cli('-s', id, '-e', code)
+          }
+          const titles = 'console.log((await Promise.all(context.pages().map(tab => tab.title()))).sort().join(", "));'
+          const lastLine = (result: Awaited<ReturnType<typeof runCli>>) => result.stdout.trim().split(/\r?\n/).at(-1)
+          const local = await session('local')
+          const fixtureTitles = '[log] First fixture, Second fixture'
+          expect(lastLine(await local(titles))).toBe(fixtureTitles)
+
+          await route('playwriter.dev').check()
+          await settings.getByText('Connect replaces the current connection.').waitFor()
+          expect(lastLine(await local(titles))).toBe(fixtureTitles)
+          await connect.click()
+          const confirmation = settings.getByRole('dialog', { name: 'Share browser through playwriter.dev' })
+          await confirmation.getByRole('button', { name: 'Cancel' }).click()
+          expect(lastLine(await local(titles))).toBe(fixtureTitles)
+          await first.bringToFront()
+          await connect.click()
+          await confirmation.getByRole('button', { name: 'Share browser' }).click()
+          const hosted = status.getByText('Connected to playwriter.dev', { exact: true })
+          await hosted.waitFor({ timeout: 20_000 })
+          await status.getByText('2 attached tabs', { exact: true }).waitFor()
+          expect((await local(titles)).ok).toBe(false)
+          expect((await cli('session', 'new')).ok).toBe(false)
+
+          const remoteArg = (id: string) => (edge ? `${edge.origin}/tunnel/${id}/extension` : id)
+          const credential = remoteArg(await copyHostedCredential(settings))
+          const owner = await session('owner', credential)
+          const observer = await session('observer', credential)
+          expect(lastLine(await observer(titles))).toBe(fixtureTitles)
+          await observer('state.arrivals = []; context.on("page", tab => state.arrivals.push(tab));')
+          const owned = await owner(`
+          state.owned = await context.newPage();
+          await state.owned.goto(${JSON.stringify(url('/owned'))});
+          const popup = context.waitForEvent("page");
+          await state.owned.getByText("Open fixture popup").click();
+          state.popup = await popup;
+          await state.popup.waitForLoadState("domcontentloaded");
+          console.log(await state.popup.title());
+        `)
+          expect(lastLine(owned)).toBe('[log] Popup fixture')
+          expect(lastLine(await owner(titles))).toBe(
+            '[log] First fixture, Owned fixture, Popup fixture, Second fixture',
+          )
+          const observed = await observer('console.log(state.arrivals.length); ' + titles)
+          expect(observed.stdout.includes('[log] 0')).toBe(true)
+          expect(lastLine(observed)).toBe(fixtureTitles)
+          const blocked = await observer(`await context.pages()[0].goto(${JSON.stringify(settings.url())});`)
+          expect(blocked.stderr.includes('Playwriter clients cannot open extension pages.')).toBe(true)
+
+          // Connection settings itself was the active tab when Connect was confirmed.
+          await settings.close()
+          await first.close()
+          await expect.poll(async () => lastLine(await observer(titles))).toBe('[log] Second fixture')
+          const closed = await owner('await state.popup.close(); await state.owned.close();')
+          expect(closed.ok).toBe(true)
+          await second.close()
+          const reopened = await openSettings(browser)
+          const stillHosted = reopened.status.getByText('Connected to playwriter.dev', { exact: true })
+          await stillHosted.waitFor()
+          await reopened.status.getByText('No eligible tabs', { exact: true }).waitFor()
+          const empty = await session('empty', credential)
+          expect(lastLine(await empty('console.log(context.pages().length);'))).toBe('[log] 0')
+          const ownedFromEmpty = await empty(`
+          const tab = await context.newPage();
+          await tab.goto(${JSON.stringify(url('/first'))});
+          console.log(await tab.title());
+          await tab.close();
+        `)
+          expect(lastLine(ownedFromEmpty)).toBe('[log] First fixture')
+          const page = await browser.newPage()
+          await page.goto(url('/first'))
+          await expect.poll(async () => lastLine(await empty(titles))).toBe('[log] First fixture')
+
+          await reopened.route('Local').check()
+          await stillHosted.waitFor()
+          expect(lastLine(await empty(titles))).toBe('[log] First fixture')
+          await reopened.connect.click()
+          await reopened.status.getByText('Connected to Local', { exact: true }).waitFor()
+          await expectRevoked(credential)
+          expect((await empty(titles)).ok).toBe(false)
+          const newLocal = await session('newlocal')
+          expect(lastLine(await newLocal(titles))).toBe('[log] First fixture')
+
+          const connectHosted = async () => {
+            await reopened.connect.click()
+            await reopened.settings
+              .getByRole('dialog', { name: 'Share browser through playwriter.dev' })
+              .getByRole('button', { name: 'Share browser' })
+              .click()
+            await stillHosted.waitFor({ timeout: 20_000 })
+            return remoteArg(await copyHostedCredential(reopened.settings))
+          }
+          await reopened.route('playwriter.dev').check()
+          const replacement = await connectHosted()
+          expect(replacement !== credential).toBe(true)
+          await reopened.disconnect.click()
+          await reopened.status.getByText('Disconnected', { exact: true }).waitFor()
+          await expectRevoked(replacement)
+          await page.close()
+          const beforeRestart = await connectHosted()
+          await reopened.status.getByText('No eligible tabs', { exact: true }).waitFor()
+          const restarted = await restart()
+          await restarted.status.getByText('Disconnected', { exact: true }).waitFor()
+          expect(await restarted.route('playwriter.dev').isChecked()).toBe(true)
+          await expectRevoked(beforeRestart)
+        },
+        {
+          initializeProfile: edge ? (worker) => redirectHostedTransport(worker, edge.origin) : undefined,
+        },
+      )
+    } finally {
+      await Promise.all([fixture.close(), edge?.close()])
+    }
+  },
+  120_000,
+)
+
+test.skipIf(process.env.PLAYWRITER_TEST_LIVE_HOSTED !== '1')(
+  'The existing hosted viewer and CLI start on the legacy anchor and lose access when it closes',
+  async () => {
+    const fixture = await createSimpleServer({
+      routes: { '/other': '<title>Other fixture</title>', '/anchor': '<title>Anchor fixture</title>' },
+    })
+    try {
+      await withSettings(async ({ browser, serviceWorker, status, cli }) => {
+        const openFixture = async (path: string) => {
+          const page = await browser.newPage()
+          await page.goto(new URL(path, fixture.baseUrl).href)
+          await page.bringToFront()
+          await serviceWorker.evaluate(() => globalThis.toggleExtensionForActiveTab())
+          return page
+        }
+        const other = await openFixture('/other')
+        const anchor = await openFixture('/anchor')
+        // Exercise the existing toolbar's share entry point without placing its secret on the host clipboard.
+        const { url } = await serviceWorker.evaluate(() => globalThis.startRemoteControlForActiveTab())
+        await status.getByText('Connected to playwriter.dev', { exact: true }).waitFor({ timeout: 15_000 })
+        const created = await cli('session', 'new', '--remote', new URL(url).hash.slice(1), '--tab-group', 'legacy')
+        const id = /Session (\d+) created/.exec(created.stdout)?.[1]
+        if (!created.ok || !id) throw new Error('CLI could not join the legacy share')
+        const firstTitle = await cli('-s', id, '-e', 'console.log(await context.pages()[0].title());')
+        expect(firstTitle.stdout.trim().endsWith('[log] Anchor fixture')).toBe(true)
+
+        const viewer = await browser.newPage()
+        try {
+          const loaded = await viewer.goto(url, { timeout: 15_000 })
+          if (!loaded?.ok()) throw new Error(`HTTP ${loaded?.status() ?? 'unavailable'}`)
+        } catch (error) {
+          const status = error instanceof Error && /^HTTP \d+$/.test(error.message) ? ` (${error.message})` : ''
+          throw new Error(`Could not open the deployed hosted viewer${status}`)
+        }
+        // Wait for the UI rather than printing URLs or recording its connection frames.
+        await viewer.getByRole('button', { name: 'Release', exact: true }).waitFor({ timeout: 15_000 })
+        expect((await viewer.getByRole('textbox').inputValue()).includes('/anchor')).toBe(true)
+        await anchor.close()
+        await viewer.getByText('Session ended', { exact: true }).waitFor({ timeout: 15_000 })
+        await expectRevoked(url)
+        expect(other.isClosed()).toBe(false)
+      })
+    } finally {
+      await fixture.close()
+    }
+  },
+  75_000,
+)
 
 test('Local settings grant and revoke actual CLI access', async () => {
   const fixture = await createSimpleServer({ routes: { '/': '<title>Local fixture</title><h1>Ready</h1>' } })

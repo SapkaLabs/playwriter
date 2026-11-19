@@ -3,6 +3,7 @@ import {
   type ConnectionReply,
   type ConnectionRequest,
   type LocalConnection,
+  type RemoteRoute,
   type Route,
 } from './connection-settings'
 
@@ -22,11 +23,16 @@ const pending = element('#pending', HTMLElement)
 const error = element('#error', HTMLElement)
 const connect = element('#connect', HTMLButtonElement)
 const disconnect = element('#disconnect', HTMLButtonElement)
-const copyCommand = element('#copy-command', HTMLButtonElement)
+const copyConnection = element('#copy-connection', HTMLButtonElement)
 const copyState = element('#copy-state', HTMLElement)
 const confirmation = element('dialog', HTMLDialogElement)
+const shareTitle = element('#share-title', HTMLElement)
+const shareDescription = element('#share-description', HTMLElement)
 const routeInputs = Array.from(routes.querySelectorAll('input'))
-const routeNames = { local: 'Local', hosted: 'playwriter.dev', tailcat: 'Tailcat' } satisfies Record<Route, string>
+const routeNames = { local: 'Local', hosted: 'playwriter.dev', tailcat: 'Public Tailcat' } satisfies Record<
+  Route,
+  string
+>
 
 const labels = {
   disconnected: 'Disconnected',
@@ -38,6 +44,7 @@ const labels = {
 let serverOptionsKey = ''
 let selectedRoute: Route = 'local'
 let activeRoute: Route = 'local'
+let confirmingRoute: RemoteRoute | undefined
 
 function setText(element: HTMLElement, text: string): void {
   if (element.textContent !== text) element.textContent = text
@@ -59,7 +66,7 @@ function render(reply: Extract<ConnectionReply, { kind: 'status' }>): void {
       : connection.scope === 'browser'
         ? 'reconnecting'
         : 'connecting'
-    const name = routeNames[connection.route]
+    const name = connection.route === 'tailcat' && connection.scope === 'tab' ? 'Tailcat' : routeNames[connection.route]
     const action = connection.online ? 'Connected' : connection.scope === 'browser' ? 'Reconnecting' : 'Connecting'
     setText(state, `${action} to ${name}${connection.online ? '' : '…'}`)
   } else if (connection.kind === 'connected' && connection.scope === 'tab') {
@@ -79,8 +86,8 @@ function render(reply: Extract<ConnectionReply, { kind: 'status' }>): void {
   )
   setText(
     pending,
-    route === 'tailcat'
-      ? 'The selected route is unavailable in Connection settings.'
+    route === 'tailcat' && tailcatServerId !== null
+      ? 'Custom Tailcat servers are unavailable in Connection settings.'
       : connection.kind !== 'disconnected' && activeRoute !== route
         ? 'Connect replaces the current connection.'
         : '',
@@ -88,10 +95,12 @@ function render(reply: Extract<ConnectionReply, { kind: 'status' }>): void {
   setText(error, reply.error)
   disconnect.hidden = connection.kind === 'disconnected' || connection.kind === 'connecting'
   disconnect.disabled = busy
-  copyCommand.hidden = connection.kind !== 'remote' || !browserScope || !connection.online
-  if (copyCommand.hidden) setText(copyState, '')
+  copyConnection.hidden = connection.kind !== 'remote' || !browserScope || !connection.online
+  setText(copyConnection, activeRoute === 'tailcat' ? 'Copy connection information' : 'Copy CLI command')
+  if (copyConnection.hidden) setText(copyState, '')
   routes.disabled = busy
-  connect.disabled = busy || route === 'tailcat' || (browserScope && activeRoute === route)
+  connect.disabled =
+    busy || (route === 'tailcat' && tailcatServerId !== null) || (browserScope && activeRoute === route)
   for (const input of routeInputs) input.checked = input.value === route
   serverChoice.hidden = route !== 'tailcat'
   const optionsKey = JSON.stringify(preferences.servers)
@@ -134,7 +143,7 @@ async function change(action: Exclude<ConnectionRequest, { kind: 'status' }>): P
         action.kind === 'connect' ? 'connecting' : 'disconnecting',
         action.kind === 'connect' ? selectedRoute : activeRoute,
       )
-      copyCommand.hidden = true
+      copyConnection.hidden = true
       setText(copyState, '')
       setText(detail, '')
       setText(error, '')
@@ -152,7 +161,14 @@ for (const input of routeInputs) {
 }
 server.onchange = () => void change({ kind: 'select-server', id: server.value || null })
 connect.onclick = () => {
-  if (selectedRoute === 'hosted') {
+  if (selectedRoute !== 'local') {
+    confirmingRoute = selectedRoute
+    const credential = selectedRoute === 'tailcat' ? 'private connection information' : 'private CLI command'
+    setText(shareTitle, `Share browser through ${routeNames[selectedRoute]}`)
+    setText(
+      shareDescription,
+      `Anyone with the ${credential} can control eligible tabs in this Chrome profile and open new tabs. Sharing continues until you disconnect or close the browser.`,
+    )
     confirmation.returnValue = ''
     confirmation.showModal()
   } else {
@@ -160,21 +176,29 @@ connect.onclick = () => {
   }
 }
 confirmation.onclose = () => {
-  if (confirmation.returnValue === 'share') void change({ kind: 'connect', confirmedRoute: 'hosted' })
+  const confirmedRoute = confirmingRoute
+  confirmingRoute = undefined
+  if (confirmation.returnValue === 'share' && confirmedRoute) void change({ kind: 'connect', confirmedRoute })
 }
 disconnect.onclick = () => void change({ kind: 'disconnect' })
-copyCommand.onclick = async () => {
+copyConnection.onclick = async () => {
   if (changePending) return
   try {
     const reply: ConnectionReply = await chrome.runtime.sendMessage({
       action: 'connectionSettings',
-      request: { kind: 'copy-command' } satisfies ConnectionRequest,
+      request: { kind: 'copy-connection' } satisfies ConnectionRequest,
     })
-    if (reply.kind !== 'command') throw new Error('Command unavailable')
-    await navigator.clipboard.writeText(reply.command)
-    setText(copyState, 'Copied command')
+    if (reply.kind === 'descriptor') {
+      await navigator.clipboard.writeText(reply.descriptor)
+      setText(copyState, 'Copied connection information')
+    } else if (reply.kind === 'command') {
+      await navigator.clipboard.writeText(reply.command)
+      setText(copyState, 'Copied command')
+    } else {
+      throw new Error('Connection information unavailable')
+    }
   } catch {
-    setText(copyState, 'Could not copy the command.')
+    setText(copyState, 'Could not copy connection information.')
   }
 }
 

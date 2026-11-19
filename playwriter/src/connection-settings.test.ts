@@ -1,19 +1,24 @@
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { once } from 'node:events'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { createRequire, stripTypeScriptTypes } from 'node:module'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { createInterface } from 'node:readline'
+import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { chromium, type BrowserContext } from '@xmorse/playwright-core'
 import { expect, test } from 'vitest'
 import { WebSocket as NodeWebSocket, WebSocketServer } from 'ws'
+import { z } from 'zod'
 import { startPlayWriterCDPRelayServer } from './cdp-relay.js'
 import { createCdpLogger } from './cdp-log.js'
 import { createFileLogger } from './create-logger.js'
 import { parseRemoteControlUrl } from './remote-control.js'
+import { descriptorConfiguration } from './tailcat-tunnel/descriptor.js'
+import { PUBLIC_DERP_MAP } from './tailcat-tunnel/protocol.js'
 import { createSimpleServer } from './test-utils.js'
 
 const exec = promisify(execFile)
@@ -92,14 +97,17 @@ async function withSettings(
   {
     relayRunning = true,
     initializeProfile,
+    packagedExtension,
   }: {
     relayRunning?: boolean
     initializeProfile?: (worker: Awaited<ReturnType<typeof getServiceWorker>>) => Promise<void>
+    packagedExtension?: string
   } = {},
 ) {
-  const relayPort = await reserveRelayPort()
+  // The developer delivery bundle has a dedicated baked-in loopback port.
+  const relayPort = packagedExtension ? 19987 : await reserveRelayPort()
   const directory = await mkdtemp(join(tmpdir(), 'pw-connection-settings-'))
-  const dist = join(directory, 'extension')
+  const dist = packagedExtension ?? join(directory, 'extension')
   const logger = createFileLogger({ logFilePath: join(directory, 'relay.log') })
   const cdpLogger = createCdpLogger({ logFilePath: join(directory, 'cdp.jsonl') })
   let relay: Awaited<ReturnType<typeof startPlayWriterCDPRelayServer>> | undefined
@@ -125,21 +133,24 @@ async function withSettings(
     return openSettings(await launch())
   }
   try {
-    const vite = extensionRequire.resolve('vite/package.json').replace(/package\.json$/, 'bin/vite.js')
-    await exec(process.execPath, [vite, 'build', '--config', 'vite.config.mts'], {
-      cwd: extensionDir,
-      windowsHide: true,
-      env: {
-        ...process.env,
-        TESTING: '',
-        // Keep the recognized dev ID with the production permission set.
-        PRODUCTION: '',
-        PLAYWRITER_AUTO_CONNECT_LOCAL: '',
-        PLAYWRITER_PORT: String(relayPort),
-        PLAYWRITER_EXTENSION_DIST: dist,
-        PLAYWRITER_OPEN_WELCOME_PAGE: '0',
-      },
-    })
+    if (!packagedExtension) {
+      const vite = extensionRequire.resolve('vite/package.json').replace(/package\.json$/, 'bin/vite.js')
+      await exec(process.execPath, [vite, 'build', '--config', 'vite.config.mts'], {
+        cwd: extensionDir,
+        windowsHide: true,
+        env: {
+          ...process.env,
+          TESTING: '',
+          // Keep the recognized dev ID with the production permission set.
+          PRODUCTION: '',
+          PLAYWRITER_AUTO_CONNECT_LOCAL: '',
+          PLAYWRITER_TAILCAT_ASSETS: '',
+          PLAYWRITER_PORT: String(relayPort),
+          PLAYWRITER_EXTENSION_DIST: dist,
+          PLAYWRITER_OPEN_WELCOME_PAGE: '0',
+        },
+      })
+    }
     if (relayRunning) await startRelay()
     const initial = await launch()
     if (initializeProfile) await initializeProfile(await getServiceWorker(initial))
@@ -220,6 +231,21 @@ async function copyHostedCredential(settings: Awaited<ReturnType<typeof openSett
   return id
 }
 
+async function usePrivateClipboard(browser: BrowserContext) {
+  // Capture only in this isolated profile. The host clipboard retains its contents.
+  await browser.addInitScript(() => {
+    let text = ''
+    Object.defineProperty(navigator, 'clipboard', {
+      value: {
+        writeText: async (value: string) => {
+          text = value
+        },
+        readText: async () => text,
+      },
+    })
+  })
+}
+
 async function expectRevoked(credential: string): Promise<void> {
   const { wsUrl } = parseRemoteControlUrl(credential)
   await expect
@@ -256,18 +282,7 @@ test.each(hostedTransports)(
     try {
       await withSettings(
         async ({ browser, serviceWorker, settings, status, route, connect, cli, restart }) => {
-          // Keep the credential inside the isolated browser and test process.
-          await browser.addInitScript(() => {
-            let text = ''
-            Object.defineProperty(navigator, 'clipboard', {
-              value: {
-                writeText: async (value: string) => {
-                  text = value
-                },
-                readText: async () => text,
-              },
-            })
-          })
+          await usePrivateClipboard(browser)
           await settings.reload()
           const url = (path: string) => new URL(path, fixture.baseUrl).href
           const first = await browser.newPage()
@@ -482,6 +497,316 @@ test('A failed hosted Connect leaves the selection pending and revokes Local', a
   }
 }, 45_000)
 
+test('Public Tailcat requires consent and a build without Tailcat fails disconnected', async () => {
+  await withSettings(async ({ settings, status, route, connect, cli }) => {
+    await connect.click()
+    await status.getByText('Connected to Local', { exact: true }).waitFor()
+    await route('Tailcat').check()
+    expect(
+      await settings.getByRole('combobox', { name: 'Tailcat server' }).locator('option:checked').textContent(),
+    ).toBe('Public Tailcat')
+    await connect.click({ timeout: 5000 })
+    const confirmation = settings.getByRole('dialog', { name: 'Share browser through Public Tailcat' })
+    await confirmation.getByRole('button', { name: 'Cancel' }).click()
+    await status.getByText('Connected to Local', { exact: true }).waitFor()
+    expect((await cli('session', 'new', '--tab-group', 'fixture')).ok).toBe(true)
+
+    await connect.click()
+    await confirmation.getByRole('button', { name: 'Share browser' }).click()
+    await status.getByText('Disconnected', { exact: true }).waitFor()
+    await settings
+      .getByRole('alert')
+      .getByText('Tailcat assets are not included in this build. Use a Tailcat-enabled build.')
+      .waitFor()
+    expect(await route('Tailcat').isChecked()).toBe(true)
+    expect((await cli('session', 'new', '--tab-group', 'fixture')).ok).toBe(false)
+  })
+}, 60_000)
+
+test.runIf(process.env.PLAYWRITER_TAILCAT_DELIVERY === '1')(
+  'the packaged public relay and CLI switch between browser-wide grants and revoke old credentials',
+  async () => {
+    const edge = process.env.PLAYWRITER_TEST_LIVE_HOSTED === '1' ? undefined : await startHostedTransportFixture()
+    const bundle = join(root, 'dist/public-derp')
+    const directory = await mkdtemp(join(tmpdir(), 'pw-settings-tailcat-'))
+    const controller = join(directory, 'controller')
+    const fixture = await createSimpleServer({
+      routes: {
+        '/': '<title>Shared fixture</title>',
+        '/owned': '<title>Owned fixture</title><a href="/popup" target="_blank">Open fixture popup</a>',
+        '/popup': '<title>Popup fixture</title>',
+      },
+    })
+    const env = {
+      ...process.env,
+      PLAYWRITER_HOST: '',
+      PLAYWRITER_TOKEN: '',
+      PLAYWRITER_TELEMETRY: '0',
+      PLAYWRITER_TAILCAT_REGISTRY: join(directory, 'registry'),
+      PLAYWRITER_STATE_DIRECTORY: join(directory, 'state'),
+    }
+    const readySchema = z.object({ host: z.string(), session: z.string(), extensionId: z.string() })
+    const supervisors: Array<{ stop(): void; exited: Promise<number | null> }> = []
+    let sequence = 0
+    const dial = async (descriptor: string) => {
+      const file = join(directory, `connection-${++sequence}.json`)
+      await writeFile(file, descriptor, { mode: 0o600 })
+      const child = spawn(process.execPath, [join(controller, 'tailcat-bin.js'), 'connect', '--descriptor', file], {
+        cwd: controller,
+        env,
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+      child.stderr.resume()
+      const exited = new Promise<number | null>((resolve) => {
+        child.once('error', () => resolve(null))
+        child.once('close', resolve)
+      })
+      const stop = () => child.kill()
+      supervisors.push({ stop, exited })
+      const lines = createInterface({ input: child.stdout })
+      const firstLine = new Promise<string | undefined>((resolve) => lines.once('line', resolve))
+      const timer = setTimeout(stop, 80_000)
+      const line = await Promise.race([firstLine, exited.then(() => undefined)])
+      clearTimeout(timer)
+      lines.close()
+      if (line === undefined) return { kind: 'failed' as const, code: await exited }
+      try {
+        const value: unknown = JSON.parse(line)
+        return { kind: 'ready' as const, ...readySchema.parse(value) }
+      } catch {
+        throw new Error('Packaged controller returned invalid readiness')
+      }
+    }
+    const runPackaged = async (host: string, session: string, code: string) => {
+      try {
+        const { stdout } = await exec(
+          process.execPath,
+          [join(controller, 'bin.js'), '--host', host, '-s', session, '--timeout', '30000', '-e', code],
+          { cwd: controller, env, windowsHide: true, timeout: 40_000, maxBuffer: 8192 },
+        )
+        return stdout.trim().split(/\r?\n/).at(-1)
+      } catch {
+        throw new Error('Packaged CLI did not complete the fixture command')
+      }
+    }
+    const assertRevoked = async (descriptor: string) => {
+      const result = await dial(descriptor)
+      expect(result.kind === 'failed' && result.code === 1).toBe(true)
+    }
+
+    // Keep failure diagnostics to assertions about fixture behavior and readiness stages.
+    const revoked: Promise<void>[] = []
+    const retryRevoked = (descriptor: string) => {
+      const check = assertRevoked(descriptor)
+      void check.catch(() => {})
+      revoked.push(check)
+    }
+    try {
+      await cp(join(bundle, 'controller'), controller, { recursive: true })
+      const delivery = JSON.parse(await readFile(join(bundle, 'delivery.json'), 'utf8'))
+      expect(delivery.testing).toBe(false)
+      await withSettings(
+        async ({ browser, serviceWorker, settings, status, route, connect, cli }) => {
+          await usePrivateClipboard(browser)
+          await settings.reload()
+          const page = await browser.newPage()
+          await page.goto(fixture.baseUrl)
+          const titles =
+            'console.log((await Promise.all(context.pages().map(page => page.title()))).sort().join(", "));'
+          const showTitle = '[log] Shared fixture'
+          const newSession = async (id?: string) => {
+            const created = await cli('session', 'new', '--tab-group', 'fixture', ...(id ? ['--remote', id] : []))
+            const session = /Session (\d+) created/.exec(created.stdout)?.[1]
+            if (!created.ok || !session) throw new Error('Could not create a fixture session')
+            return (code: string) => cli('-s', session, '-e', code)
+          }
+          const confirm = async (name: string) => {
+            await connect.click()
+            await settings
+              .getByRole('dialog', { name: `Share browser through ${name}` })
+              .getByRole('button', { name: 'Share browser' })
+              .click()
+            await status.getByText(`Connected to ${name}`, { exact: true }).waitFor({ timeout: 65_000 })
+          }
+          const copyDescriptor = async (optionsPage = settings) => {
+            const copy = optionsPage.getByRole('button', { name: 'Copy connection information' })
+            await copy.click()
+            await optionsPage.getByText('Copied connection information', { exact: true }).waitFor()
+            const text: unknown = await optionsPage.evaluate(() => Reflect.get(navigator, 'clipboard').readText())
+            if (typeof text !== 'string') throw new Error('Settings did not copy connection information')
+            const descriptor = (() => {
+              try {
+                return descriptorConfiguration(JSON.parse(text))
+              } catch {
+                throw new Error('Settings did not copy valid connection information')
+              }
+            })()
+            expect(descriptor.v).toBe(2)
+            expect(descriptor.derpMapURL === PUBLIC_DERP_MAP).toBe(true)
+            expect((await optionsPage.locator('body').innerText()).includes(descriptor.addr)).toBe(false)
+            const legacy = await browser.newPage()
+            try {
+              await legacy.goto(new URL('src/tailcat-share.html', serviceWorker.url()).href)
+              const legacyText = await legacy.getByLabel('Connection information').inputValue()
+              expect(legacyText.includes(descriptor.addr)).toBe(false)
+            } finally {
+              await legacy.close()
+            }
+            return text
+          }
+          const activeController = async (descriptor: string) => {
+            const result = await dial(descriptor)
+            if (result.kind !== 'ready') throw new Error('Packaged controller never reached the public relay')
+            return result
+          }
+          const expectControllerRevoked = async ({ host, session }: Awaited<ReturnType<typeof activeController>>) => {
+            await expect(runPackaged(host, session, 'console.log(await context.pages()[0].title())')).rejects.toThrow(
+              'Packaged CLI did not complete the fixture command',
+            )
+          }
+          await connect.click()
+          await status.getByText('1 attached tab', { exact: true }).waitFor()
+          const local = await newSession()
+          await route('Tailcat').check()
+          expect((await local(titles)).stdout.includes(showTitle)).toBe(true)
+          await confirm('Public Tailcat')
+          expect((await local(titles)).ok).toBe(false)
+          await status.getByText('1 attached tab', { exact: true }).waitFor()
+          const first = await copyDescriptor()
+          const publicClient = await activeController(first)
+          expect(await runPackaged(publicClient.host, publicClient.session, titles)).toBe(showTitle)
+          console.info('Settings route verified: Local → Public Tailcat')
+
+          const observer = await fetch(`${publicClient.host}/cli/session/new`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ extensionId: publicClient.extensionId, tabGroup: 'observer' }),
+            signal: AbortSignal.timeout(15_000),
+          })
+          const observerSession = z.object({ id: z.string() }).safeParse(await observer.json())
+          if (!observer.ok || !observerSession.success) throw new Error('Could not create a second CLI session')
+          const own = await runPackaged(
+            publicClient.host,
+            publicClient.session,
+            `
+            state.owned = await context.newPage();
+            await state.owned.goto(${JSON.stringify(new URL('/owned', fixture.baseUrl).href)});
+            const popup = context.waitForEvent('page');
+            await state.owned.getByText('Open fixture popup').click();
+            state.popup = await popup;
+            await state.popup.waitForLoadState('domcontentloaded');
+            console.log(await state.popup.title());
+          `,
+          )
+          expect(own).toBe('[log] Popup fixture')
+          expect(await runPackaged(publicClient.host, observerSession.data.id, titles)).toBe(showTitle)
+          await runPackaged(
+            publicClient.host,
+            publicClient.session,
+            'await state.popup.close(); await state.owned.close();',
+          )
+          console.info('Public Tailcat verified: owned tab and popup stay private to their CLI session')
+
+          await route('playwriter.dev').check()
+          expect(await runPackaged(publicClient.host, publicClient.session, titles)).toBe(showTitle)
+          await confirm('playwriter.dev')
+          retryRevoked(first)
+          await expectControllerRevoked(publicClient)
+          await status.getByText('1 attached tab', { exact: true }).waitFor()
+          const hostedId = await copyHostedCredential(settings)
+          const hostedCredential = edge ? `${edge.origin}/tunnel/${hostedId}/extension` : hostedId
+          const hosted = await newSession(hostedCredential)
+          console.info(
+            `Settings route verified: Public Tailcat → playwriter.dev (${edge ? 'loopback Worker' : 'deployed'})`,
+          )
+          await route('Tailcat').check()
+          expect((await hosted(titles)).stdout.includes(showTitle)).toBe(true)
+          await confirm('Public Tailcat')
+          await expectRevoked(hostedCredential)
+          expect((await hosted(titles)).ok).toBe(false)
+          const second = await copyDescriptor()
+          expect(second !== first).toBe(true)
+          const replacement = await activeController(second)
+          console.info('Settings route verified: playwriter.dev → Public Tailcat, stale hosted credential rejected')
+          await route('Local').check()
+          expect(await runPackaged(replacement.host, replacement.session, titles)).toBe(showTitle)
+          await connect.click()
+          await status.getByText('Connected to Local', { exact: true }).waitFor()
+          retryRevoked(second)
+          await expectControllerRevoked(replacement)
+          const localAgain = await newSession()
+          expect((await localAgain(titles)).stdout.includes(showTitle)).toBe(true)
+          console.info('Settings route verified: Public Tailcat → Local')
+
+          await route('Tailcat').check()
+          await confirm('Public Tailcat')
+          const blank = await browser.newPage()
+          await page.close()
+          await status.getByText('No eligible tabs', { exact: true }).waitFor()
+          await settings.close()
+          // Leave the transport idle without a debugger or a settings page past the MV3 idle timeout.
+          await delay(33_000)
+          const reopened = await openSettings(browser)
+          await reopened.status.getByText('Connected to Public Tailcat', { exact: true }).waitFor()
+          const last = await copyDescriptor(reopened.settings)
+          const empty = await activeController(last)
+          expect(await runPackaged(empty.host, empty.session, 'console.log(context.pages().length)')).toBe('[log] 0')
+          await blank.goto(fixture.baseUrl)
+          await reopened.status.getByText('1 attached tab', { exact: true }).waitFor()
+          await expect.poll(() => runPackaged(empty.host, empty.session, titles), { timeout: 15_000 }).toBe(showTitle)
+          console.info('Public Tailcat verified: stays active with zero eligible tabs and enrolls a newly eligible tab')
+          await reopened.disconnect.click()
+          await reopened.status.getByText('Disconnected', { exact: true }).waitFor()
+          await expect
+            .poll(() => reopened.settings.getByRole('button', { name: 'Copy connection information' }).isVisible())
+            .toBe(false)
+          retryRevoked(last)
+          await expectControllerRevoked(empty)
+
+          await reopened.route('Local').check()
+          await reopened.connect.click()
+          await reopened.status.getByText('Connected to Local', { exact: true }).waitFor()
+          const beforeFailure = await newSession()
+          await reopened.serviceWorker.evaluate((mapURL) => {
+            const fetch = globalThis.fetch
+            globalThis.fetch = (input, options) =>
+              input === mapURL ? Promise.resolve(new Response(null, { status: 503 })) : fetch(input, options)
+          }, PUBLIC_DERP_MAP)
+          await reopened.route('Tailcat').check()
+          await reopened.connect.click()
+          await reopened.settings
+            .getByRole('dialog', { name: 'Share browser through Public Tailcat' })
+            .getByRole('button', { name: 'Share browser' })
+            .click()
+          await reopened.status.getByText('Disconnected', { exact: true }).waitFor()
+          await reopened.settings
+            .getByText('Could not connect through Public Tailcat. Try again.', { exact: true })
+            .waitFor()
+          expect(await reopened.route('Tailcat').isChecked()).toBe(true)
+          expect((await beforeFailure(titles)).ok).toBe(false)
+          expect((await cli('session', 'new')).ok).toBe(false)
+          console.info('Public Tailcat verified: failed startup stays disconnected without fallback')
+          await Promise.all(revoked)
+          console.info(
+            'Public Tailcat verified: both replaced descriptors and the disconnected descriptor were rejected',
+          )
+        },
+        {
+          packagedExtension: join(bundle, 'extension'),
+          initializeProfile: edge ? (worker) => redirectHostedTransport(worker, edge.origin) : undefined,
+        },
+      )
+    } finally {
+      for (const supervisor of supervisors) supervisor.stop()
+      await Promise.allSettled(supervisors.map(({ exited }) => exited))
+      await Promise.all([fixture.close(), edge?.close()])
+      await rm(directory, { recursive: true, force: true, maxRetries: 5 })
+    }
+  },
+  360_000,
+)
+
 test('Local settings grant and revoke actual CLI access', async () => {
   const fixture = await createSimpleServer({ routes: { '/': '<title>Local fixture</title><h1>Ready</h1>' } })
   const fixtureUrl = new URL('/', fixture.baseUrl).href
@@ -512,8 +837,8 @@ test('Local settings grant and revoke actual CLI access', async () => {
 
       await route('Tailcat').check()
       await status.getByText('Connected to Local', { exact: true }).waitFor()
-      await settings.getByText('The selected route is unavailable in Connection settings.').waitFor()
-      expect(await connect.isDisabled()).toBe(true)
+      await settings.getByText('Connect replaces the current connection.').waitFor()
+      expect(await connect.isEnabled()).toBe(true)
       expect((await runFixture()).stdout).toContain('Local fixture')
 
       const other = await cli('session', 'new', '--tab-group', 'observer')
@@ -905,9 +1230,10 @@ test.each([
         if (!selectLegacy) await route('Tailcat').check()
         const pendingServer = selectLegacy ? 'Public' : 'Public Tailcat'
         const servers = settings.getByRole('combobox', { name: 'Tailcat server' })
+        await servers.waitFor()
         expect(await servers.locator('option').allTextContents()).toEqual(['Public Tailcat', 'Public'])
         expect(await servers.locator('option:checked').textContent()).toBe(pendingServer)
-        expect(await connect.isDisabled()).toBe(true)
+        await expect.poll(() => connect.isDisabled()).toBe(selectLegacy)
         await route('playwriter.dev').check()
         await expect.poll(() => route('playwriter.dev').isEnabled()).toBe(true)
 

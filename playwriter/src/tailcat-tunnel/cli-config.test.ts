@@ -50,6 +50,9 @@ it('runs CLI profile CRUD and rejects conflicting assertions before invoking a n
         run('connect', '--descriptor', descriptor, '--native', join(directory, 'does-not-exist'), ...assertion),
       ).rejects.toMatchObject({ stderr: expect.stringContaining('SERVER_MISMATCH') })
     }
+    await expect(
+      run('connect', '--descriptor', descriptor, '--native', join(directory, 'does-not-exist')),
+    ).rejects.toMatchObject({ stderr: expect.stringContaining('Tailcat native runtime is missing') })
     expect(JSON.parse((await run('profile', 'remove', id)).stdout).selectedProfileId).toBeNull()
     await run('profile', 'remove', initial.profiles[0].id)
     expect(JSON.parse((await run('profile', 'list')).stdout).profiles).toEqual([])

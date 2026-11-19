@@ -30,14 +30,14 @@ import {
   type UpdateTabGroupResult,
 } from 'playwriter/src/protocol'
 import { handleGhostBrowserCommand, type GhostBrowserCommandParams } from 'playwriter/src/ghost-browser'
-import { RemoteTunnel } from './remote-tunnel'
+import { RemoteTunnel, type RemoteTunnelOptions, type TunnelStatus } from './remote-tunnel'
 import { TailcatTunnel } from './tailcat-tunnel/index'
+import { PUBLIC_DERP_MAP } from 'playwriter/src/tailcat-tunnel/protocol'
 import {
   ProfileStore,
   findProfile,
   ConfigurationError,
   configurationError,
-  type ServerProfile,
   type ProfileMutation,
 } from 'playwriter/src/tailcat-tunnel/config'
 import { fetchDERPMap } from 'playwriter/src/tailcat-tunnel/map'
@@ -82,6 +82,7 @@ import {
   type ConnectionReply,
   type ConnectionRequest,
   type LocalConnection,
+  type RemoteRoute,
   type Route,
 } from './connection-settings'
 
@@ -317,32 +318,33 @@ let tabGroupQueue: Promise<void> = Promise.resolve()
 let autoAttachParams: Protocol.Target.SetAutoAttachRequest | null = null
 
 // ============================================================================
-// Remote control: share the browser with a remote agent through a playwriter.dev
-// tunnel. One tunnel per browser. A tunneled relay gets the same access as the
+// Remote control: share the browser through a hosted or Tailcat tunnel. One
+// tunnel per browser. A tunneled relay gets the same access as the
 // local relay: every attached tab, plus new tabs it opens (in the background, in
 // its session tab group). Only whole-profile cookie/cache commands are denied.
 //
 // Toolbar shares have an anchor tab. Settings shares enroll eligible tabs for
 // the browser session and stay up with an empty inventory. Stopping either
 // closes the tunneled relays and detaches the tabs enrolled by that grant.
-// chrome.storage.session preserves the grant across worker restarts and clears
-// it on browser exit.
+// Hosted grants survive worker restarts through chrome.storage.session. Tailcat
+// grants belong to the live transport owner and end if it is lost.
 // ============================================================================
 
 type RemoteTunnelScope =
   | { kind: 'tab'; anchorTabId: number; remoteTabIds: Set<number> }
-  | { kind: 'browser'; enrollment: BrowserEnrollment<'hosted'> }
+  | { kind: 'browser'; enrollment: BrowserEnrollment<RemoteRoute> }
 
-type RemoteTunnelRuntime = {
-  tunnel: RemoteTunnel | TailcatTunnel
-  tailcat?: boolean
-  profile?: ServerProfile
-  tunnelId: string
-  scope: RemoteTunnelScope
-  status: string
-}
+type RemoteTunnelRuntime = { tunnelId: string; scope: RemoteTunnelScope } & (
+  | { route: 'hosted'; tunnel: RemoteTunnel; status: TunnelStatus }
+  | {
+      route: 'tailcat'
+      tunnel: TailcatTunnel
+      status: 'starting' | 'ready' | 'connected' | 'disconnected'
+      profileId?: string
+    }
+)
 let remoteTunnel: RemoteTunnelRuntime | null = null
-let browserRemoteCleanup: Promise<unknown> | undefined
+let remoteCleanup: Promise<unknown> | undefined
 let settingsTransition: { kind: 'connecting' | 'disconnecting'; route: Route } | undefined
 let tailcatLogScopes = 0
 
@@ -379,12 +381,13 @@ async function changeTailcatProfile(change: ProfileMutation, stopActive: boolean
     const current = await tailcatProfiles.read()
     // Validate all form fields/revisions before revoking an active share.
     await new ProfileStore({ read: async () => current, write: async () => {} }).update(change)
+    const legacyTailcat = getLegacyTailcat()
     const changesActive =
       change.action === 'select' ||
-      (remoteTunnel?.profile?.id === change.id && change.action !== 'add') ||
+      (legacyTailcat?.profileId === change.id && change.action !== 'add') ||
       tailcatStarting
     if (changesActive && (remoteTunnel || tailcatStarting)) {
-      if (!stopActive || (remoteTunnel && !remoteTunnel.tailcat))
+      if (!stopActive || (remoteTunnel && !legacyTailcat))
         throw new ConfigurationError('SHARE_ACTIVE', 'Stop sharing before changing this server')
       stopRemoteControl()
       await tailcatDisposal
@@ -393,6 +396,10 @@ async function changeTailcatProfile(change: ProfileMutation, stopActive: boolean
   } finally {
     tailcatChanging = false
   }
+}
+
+function getLegacyTailcat() {
+  return remoteTunnel?.route === 'tailcat' && remoteTunnel.scope.kind === 'tab' ? remoteTunnel : undefined
 }
 
 /**
@@ -404,13 +411,14 @@ type RelayMessageSink = { send(message: any): void; remoteRuntime?: RemoteTunnel
 const remoteRelayConnections = new Map<string, { send(message: any): void }>()
 
 // No relay consumes the tabs anymore: drop debuggers so a later reconnect re-attaches fresh.
-function detachAllTabDebuggers(): void {
-  for (const tabId of store.getState().tabs.keys()) {
+function detachAllTabDebuggers(): Promise<void[]> {
+  const detaches = Array.from(store.getState().tabs.keys(), (tabId) =>
     chrome.debugger.detach({ tabId }).catch((err) => {
       logger.debug('Error detaching from tab:', tabId, err.message)
-    })
-  }
+    }),
+  )
   childSessions.clear()
+  return Promise.all(detaches)
 }
 
 function markAllTabsConnecting(tabs: Map<number, TabInfo>): Map<number, TabInfo> {
@@ -429,8 +437,18 @@ const LOCAL_ACCESS_STOPPED = 'Local access was disconnected.'
 
 type TabGroup = Pick<TabInfo, 'groupTitle' | 'groupKey' | 'groupColor'>
 type BrowserTabOrigin = 'discovered' | 'created'
-type BrowserEnrollment<R extends Route = 'local' | 'hosted'> = { route: R; tabs: Map<number, BrowserTabOrigin> }
+type BrowserEnrollment<R extends Route = Route> = { route: R; tabs: Map<number, BrowserTabOrigin> }
 let browserEnrollment: BrowserEnrollment | undefined
+function isRemoteEnrollment(enrollment: BrowserEnrollment | undefined): enrollment is BrowserEnrollment<RemoteRoute> {
+  return enrollment !== undefined && enrollment.route !== 'local'
+}
+
+function waitForSocketClose(socket: WebSocket | null): Promise<void> {
+  if (!socket || socket.readyState === WebSocket.CLOSED) return Promise.resolve()
+  return new Promise<void>((resolve) => {
+    socket.addEventListener('close', () => resolve(), { once: true })
+  })
+}
 const ownedTabGroups = new Map<number, TabGroup>()
 
 function restoreOwnedTabGroups(value: unknown): void {
@@ -514,7 +532,7 @@ class ConnectionManager {
 
   async allowFromTab(): Promise<boolean> {
     await this.accessReady
-    if (this.transition || settingsTransition || browserEnrollment?.route === 'hosted') return false
+    if (this.transition || settingsTransition || isRemoteEnrollment(browserEnrollment)) return false
     if (!this.legacyAccess) {
       const revocation = this.revocation
       await chrome.storage.session.set({ [LOCAL_ACCESS_KEY]: true })
@@ -575,6 +593,7 @@ class ConnectionManager {
     const socket = this.pendingSocket ?? this.ws
     this.pendingSocket = this.ws = null
     this.connectionPromise = null
+    const socketClosed = scope === 'all' ? waitForSocketClose(socket) : undefined
     socket?.close()
     this.preserveTabsOnDetach = false
     recorderActive = false
@@ -588,7 +607,7 @@ class ConnectionManager {
             ...inFlightTabAttaches.values(),
           ])
         : Promise.resolve([])
-    await Promise.all([persisted, withTimeout(detach, 3000, [])])
+    await Promise.all([persisted, scope === 'all' ? detach : withTimeout(detach, 3000, []), socketClosed])
   }
 
   async ensureConnection(): Promise<void> {
@@ -806,7 +825,7 @@ class ConnectionManager {
     // remote agents keep driving them without any local playwriter.
     const keepTabsForRemote = remoteTunnel !== null
     if (!keepTabsForRemote) {
-      detachAllTabDebuggers()
+      void detachAllTabDebuggers()
     }
     this.ws = null
 
@@ -1010,7 +1029,7 @@ function sendLog(level: string, args: any[]) {
 }
 
 function emitLog(level: 'log' | 'debug' | 'info' | 'warn' | 'error', args: any[]): void {
-  if (remoteTunnel?.tailcat || tailcatLogScopes) return
+  if (remoteTunnel?.route === 'tailcat' || tailcatLogScopes) return
   console[level](...args)
   sendLog(level, args)
 }
@@ -1332,7 +1351,7 @@ async function dispatchRelayMessage(message: any, sink: RelayMessageSink): Promi
       .catch((e) => {
         logger.debug('updateTabGroup queue error:', e)
       })
-    if (sink.remoteRuntime?.tailcat) await tabGroupQueue
+    if (sink.remoteRuntime?.route === 'tailcat') await tabGroupQueue
     return
   }
 
@@ -1361,7 +1380,7 @@ async function dispatchRelayMessage(message: any, sink: RelayMessageSink): Promi
 
   const response: ExtensionResponseMessage = { id: message.id }
   try {
-    if (import.meta.env.TESTING && sink.remoteRuntime?.tailcat)
+    if (import.meta.env.TESTING && sink.remoteRuntime?.route === 'tailcat')
       await waitTailcatBarrier('dispatch', message.params?.method)
     assertActive()
     response.result = await handleCommand(message as ExtensionCommandMessage, {
@@ -1372,7 +1391,7 @@ async function dispatchRelayMessage(message: any, sink: RelayMessageSink): Promi
     logger.debug('Error handling command:', error)
     response.error = error.message
   }
-  if (import.meta.env.TESTING && sink.remoteRuntime?.tailcat)
+  if (import.meta.env.TESTING && sink.remoteRuntime?.route === 'tailcat')
     await waitTailcatBarrier('response', message.params?.method)
   sink.send(response)
 }
@@ -1434,7 +1453,7 @@ async function createTabInPreferredWindow(options: {
     })
     options.assertActive()
     if (tab.id !== undefined) {
-      if (enrollment && (enrollment.route === 'hosted' || !connectionManager.allowsLegacyAccess)) {
+      if (enrollment && (isRemoteEnrollment(enrollment) || !connectionManager.allowsLegacyAccess)) {
         enrollment.tabs.set(tab.id, 'created')
       }
       // onCreated can precede the create() result. Set the owner before any
@@ -2259,7 +2278,7 @@ async function attachTabDebugger(
   const assertTabActive = () => {
     assertActive?.()
     if (
-      (enrollment?.route === 'hosted' && !origin) ||
+      (isRemoteEnrollment(enrollment) && !origin) ||
       (origin &&
         (!store.getState().tabs.has(tabId) || (enrollment !== browserEnrollment && enrollment?.tabs.has(tabId)))) ||
       (startedWithoutRemote && revocation !== connectionManager.revocation)
@@ -2493,7 +2512,12 @@ function syncToolbarState(tabId: number): void {
         window.__playwriterToolbarSetRecording?.(recording)
         window.__playwriterToolbarSetRemote?.(remoteActive, tailcat, browserWide)
       },
-      args: [recorderActive, remoteTunnel !== null, Boolean(remoteTunnel?.tailcat), remoteTunnel?.scope.kind === 'browser'],
+      args: [
+        recorderActive,
+        remoteTunnel !== null,
+        remoteTunnel?.route === 'tailcat',
+        remoteTunnel?.scope.kind === 'browser',
+      ],
     })
     .catch(() => {})
 }
@@ -2533,7 +2557,7 @@ function setRemoteStateInAllTabs(active: boolean): void {
         func: (on: boolean, tailcat: boolean, browserWide: boolean) => {
           window.__playwriterToolbarSetRemote?.(on, tailcat, browserWide)
         },
-        args: [active, Boolean(remoteTunnel?.tailcat), remoteTunnel?.scope.kind === 'browser'],
+        args: [active, remoteTunnel?.route === 'tailcat', remoteTunnel?.scope.kind === 'browser'],
       })
       .catch(() => {})
   }
@@ -2556,7 +2580,7 @@ async function connectTab(
   tabId: number,
   options?: { groupTitle?: string; groupKey?: string; groupColor?: chrome.tabGroups.ColorEnum },
 ): Promise<void> {
-  if (browserEnrollment?.route === 'hosted') {
+  if (isRemoteEnrollment(browserEnrollment)) {
     await reconcileBrowserTab(tabId)
     return
   }
@@ -2734,18 +2758,21 @@ type PersistedRemoteTunnel =
   | { scope: 'browser'; tunnelId: string }
   | { anchorTabId: number; tunnelId: string; remoteTabIds: number[] }
 
-function persistRemoteTunnel(): Promise<void> {
+function persistRemoteTunnel({ required = false } = {}): Promise<void> {
   let entry: PersistedRemoteTunnel | null = null
-  if (remoteTunnel && !remoteTunnel.tailcat) {
+  if (remoteTunnel?.route === 'hosted') {
     const { scope, tunnelId } = remoteTunnel
     entry =
       scope.kind === 'browser'
         ? { scope: 'browser', tunnelId }
         : { anchorTabId: scope.anchorTabId, tunnelId, remoteTabIds: Array.from(scope.remoteTabIds) }
   }
-  return chrome.storage.session.set({ [REMOTE_TUNNEL_STORAGE_KEY]: entry }).catch(() => {
-    logger.debug('Could not save remote sharing state')
-  })
+  const saved = chrome.storage.session.set({ [REMOTE_TUNNEL_STORAGE_KEY]: entry })
+  return required
+    ? saved
+    : saved.catch(() => {
+        logger.debug('Could not save remote sharing state')
+      })
 }
 
 const REMOTE_CONTROL_STOPPED_ERROR = 'Remote control was stopped by the user.'
@@ -2924,24 +2951,20 @@ async function sendRemoteHelloAndTargets(conn: { send(message: any): void }, sco
   }
 }
 
-type RemoteStartOptions = {
-  tunnelId?: string
-  remoteTabIds?: number[]
-  tailcat?: boolean
-  profile?: ServerProfile
-  deadline?: number
-}
+type RemoteStartOptions =
+  | { route: 'hosted'; tunnelId?: string; remoteTabIds?: number[] }
+  | { route: 'tailcat'; derpMapURL: string; profileId?: string; deadline?: number }
 
 async function startRemoteControl(
   anchorTabId: number,
-  options: RemoteStartOptions = {},
+  options: RemoteStartOptions = { route: 'hosted' },
 ): Promise<{ url: string; started: boolean; id: string }> {
   if (
     settingsTransition ||
     connectionManager.changingLocalAccess ||
     tailcatStopping ||
     tailcatCleanupFailed ||
-    (!options.tailcat && (tailcatStarting || tailcatChanging))
+    (options.route === 'hosted' && (tailcatStarting || tailcatChanging))
   ) {
     throw new Error('Sharing transition in progress')
   }
@@ -2956,45 +2979,39 @@ async function startRemoteControl(
     await connectionManager.disconnectFromSettings({ browserOnly: true })
     if (browserEnrollment || connectionManager.changingLocalAccess) throw new Error('Sharing transition in progress')
   }
-  await browserRemoteCleanup
+  await remoteCleanup
   if (settingsTransition || remoteTunnel) throw new Error('Sharing transition in progress')
   return startRemoteTunnel({ kind: 'tab', anchorTabId, remoteTabIds: new Set() }, options)
 }
 
-async function startRemoteTunnel(scope: RemoteTunnelScope, options: RemoteStartOptions = {}) {
-  const tunnelId = options.tunnelId || generateTunnelId()
-  let markOnline: () => void = () => {}
+async function startRemoteTunnel(
+  target: Extract<RemoteTunnelScope, { kind: 'tab' }> | { kind: 'browser' },
+  options: RemoteStartOptions,
+) {
+  const { route } = options
+  const restoredId = options.route === 'hosted' ? options.tunnelId : undefined
+  const tunnelId = restoredId ?? generateTunnelId()
+  const scope: RemoteTunnelScope =
+    target.kind === 'browser' ? { kind: 'browser', enrollment: { route, tabs: new Map() } } : target
+  let settleStartup: (online: boolean) => void = () => {}
   const online = new Promise<boolean>((resolve) => {
-    markOnline = () => resolve(true)
+    settleStartup = resolve
   })
-  const Tunnel = options.tailcat ? TailcatTunnel : RemoteTunnel
-  const tunnel = new Tunnel({
-    profile: options.profile,
-    deadline: options.deadline,
-    ensureOffscreen: ensureOffscreenDocument,
-    onFatal: (reason: string) => {
-      if (remoteTunnel?.tunnel === tunnel) {
-        stopRemoteControl()
-        tailcatFailure = reason
-      }
-    },
+  const tunnelOptions: RemoteTunnelOptions = {
     tunnelId,
     baseDomain: REMOTE_TUNNEL_BASE_DOMAIN,
     logger,
     onStatusChange: (status, detail) => {
-      if (options.tailcat && status === 'online') clearTimeout(tailcatStartupTimer)
-      if (remoteTunnel?.tunnel === tunnel) {
-        remoteTunnel.status = options.tailcat
-          ? status === 'online'
-            ? remoteTunnel.status === 'connected'
-              ? 'connected'
-              : 'ready'
-            : status === 'error'
-              ? 'disconnected'
-              : 'starting'
-          : status
-        if (status === 'online') markOnline()
+      if (remoteTunnel !== runtime) return
+      if (runtime.route === 'hosted') {
+        runtime.status = status
+      } else if (status === 'online') {
+        clearTimeout(tailcatStartupTimer)
+        if (runtime.status !== 'connected') runtime.status = 'ready'
+      } else {
+        runtime.status = status === 'error' ? 'disconnected' : 'starting'
       }
+      if (status === 'online') settleStartup(true)
       logger.debug('Remote tunnel status:', status, detail || '')
     },
     onConnectionOpen: (virtualConn) => {
@@ -3015,7 +3032,7 @@ async function startRemoteTunnel(scope: RemoteTunnelScope, options: RemoteStartO
       remoteRelayConnections.set(connKey, conn)
       void sendRemoteHelloAndTargets(conn, scope)
         .then(() => {
-          if (active && remoteTunnel === runtime && runtime.tailcat) runtime.status = 'connected'
+          if (active && remoteTunnel === runtime && runtime.route === 'tailcat') runtime.status = 'connected'
         })
         .catch(() => virtualConn.close())
       return {
@@ -3032,7 +3049,7 @@ async function startRemoteTunnel(scope: RemoteTunnelScope, options: RemoteStartO
               remoteRuntime: runtime,
               isCurrent: () => active && remoteTunnel === runtime,
             }).catch(() => virtualConn.close())
-          return runtime.tailcat ? withoutTailcatLogs(dispatch) : dispatch()
+          return runtime.route === 'tailcat' ? withoutTailcatLogs(dispatch) : dispatch()
         },
         onClose: () => {
           active = false
@@ -3040,16 +3057,34 @@ async function startRemoteTunnel(scope: RemoteTunnelScope, options: RemoteStartO
         },
       }
     },
-  })
-
-  const runtime: RemoteTunnelRuntime = {
-    tunnel,
-    tunnelId,
-    scope,
-    status: options.tailcat ? 'starting' : 'connecting',
-    tailcat: options.tailcat,
-    profile: options.profile,
   }
+
+  const runtime: RemoteTunnelRuntime =
+    options.route === 'tailcat'
+      ? {
+          route: options.route,
+          tunnel: new TailcatTunnel({
+            ...tunnelOptions,
+            derpMapURL: options.derpMapURL,
+            deadline: options.deadline,
+            keepAlive: scope.kind === 'browser',
+            ensureOffscreen: ensureOffscreenDocument,
+            onFatal: (reason) => {
+              if (remoteTunnel !== runtime) return
+              stopRemoteControl()
+              settleStartup(false)
+              if (scope.kind === 'tab') tailcatFailure = reason
+              else if (!settingsTransition)
+                connectionSettingsError = 'Public Tailcat disconnected. Connect again to share.'
+            },
+          }),
+          tunnelId,
+          scope,
+          status: 'starting',
+          profileId: options.profileId,
+        }
+      : { route: options.route, tunnel: new RemoteTunnel(tunnelOptions), tunnelId, scope, status: 'connecting' }
+  const { tunnel } = runtime
   // Set before attaching so the maintain loop and relay-close handling keep
   // these tabs 'connected' without a local relay: the tunnel is the consumer.
   remoteTunnel = runtime
@@ -3059,15 +3094,25 @@ async function startRemoteTunnel(scope: RemoteTunnelScope, options: RemoteStartO
     tunnel.start()
     updateSharingMenus()
     setRemoteStateInAllTabs(true)
-    if (!options.tunnelId && !(await withTimeout(online, 10_000, false))) {
-      throw new Error('Hosted tunnel startup timed out')
+    if (!restoredId) {
+      const ready =
+        runtime.route === 'tailcat'
+          ? await Promise.race([
+              online,
+              runtime.tunnel.disposed.then(
+                () => false,
+                () => false,
+              ),
+            ])
+          : await withTimeout(online, 10_000, false)
+      if (!ready) throw new Error('Remote tunnel startup failed')
     }
     if (remoteTunnel !== runtime) throw new Error(REMOTE_CONTROL_STOPPED_ERROR)
     await persistRemoteTunnel()
     return { url: tunnel.url, started: true, id: tunnelId }
   }
   const { anchorTabId } = scope
-  if (runtime.tailcat) tailcatFailure = null
+  if (runtime.route === 'tailcat') tailcatFailure = null
   updateSharingMenus()
   // The tunnel is the consumer, so the anchor attaches even without a local relay.
   if (store.getState().tabs.get(anchorTabId)?.state !== 'connected') {
@@ -3091,7 +3136,7 @@ async function startRemoteTunnel(scope: RemoteTunnelScope, options: RemoteStartO
       throw new Error(REMOTE_CONTROL_STOPPED_ERROR)
     }
   }
-  for (const tabId of options.remoteTabIds || []) {
+  for (const tabId of (options.route === 'hosted' ? options.remoteTabIds : undefined) ?? []) {
     if (tabId === anchorTabId) {
       continue
     }
@@ -3140,11 +3185,12 @@ function stopRemoteControl(): boolean {
     return false
   }
   remoteTunnel = null
-  if (runtime.tailcat) tailcatFailure = null
+  if (runtime.route === 'tailcat') tailcatFailure = null
   setRemoteStateInAllTabs(false)
   updateSharingMenus()
-  runtime.tunnel.close()
-  if (runtime.tunnel instanceof TailcatTunnel) {
+  let transportClosed = Promise.resolve()
+  if (runtime.route === 'tailcat') {
+    runtime.tunnel.close()
     tailcatStopping = true
     tailcatDisposal = runtime.tunnel.disposed.then(
       () => {
@@ -3158,8 +3204,14 @@ function stopRemoteControl(): boolean {
       },
     )
     void tailcatDisposal.catch(() => {})
+    transportClosed = tailcatDisposal
+  } else {
+    // Closing the hosted tunnel synchronously severs its message handlers.
+    // An edge may process revocation without acknowledging the close frame.
+    runtime.tunnel.close()
   }
-  const persisted = persistRemoteTunnel()
+  const persisted = persistRemoteTunnel({ required: true })
+  remoteCleanup = Promise.all([persisted, transportClosed])
   if (runtime.scope.kind === 'browser') {
     const { enrollment } = runtime.scope
     if (browserEnrollment === enrollment) browserEnrollment = undefined
@@ -3167,21 +3219,22 @@ function stopRemoteControl(): boolean {
     skillRecordingId = null
     setRecorderStateInAllTabs(false)
     store.setState({ connectionState: 'idle', errorText: undefined })
-    browserRemoteCleanup = Promise.all([persisted, withTimeout(detachBrowserTabs(enrollment), 3000, [])])
-    return true
+    remoteCleanup = Promise.all([remoteCleanup, detachBrowserTabs(enrollment)])
+  } else {
+    const detaches = Array.from(runtime.scope.remoteTabIds, (tabId) => detachTab(tabId, true))
+    // Tabs kept 'connected' only for the tunnel go back to waiting for the local relay.
+    if (connectionManager.ws?.readyState !== WebSocket.OPEN) {
+      const replaced = store.getState().connectionState === 'extension-replaced'
+      const detached = detachAllTabDebuggers()
+      remoteCleanup = Promise.all([remoteCleanup, detached])
+      store.setState((state) => {
+        return { tabs: replaced ? new Map() : markAllTabsConnecting(state.tabs) }
+      })
+    }
+    remoteCleanup = Promise.all([remoteCleanup, ...detaches])
+    logger.log('Remote control stopped, anchor tab', runtime.scope.anchorTabId)
   }
-  for (const tabId of runtime.scope.remoteTabIds) {
-    detachTab(tabId, true)
-  }
-  // Tabs kept 'connected' only for the tunnel go back to waiting for the local relay.
-  if (connectionManager.ws?.readyState !== WebSocket.OPEN) {
-    const replaced = store.getState().connectionState === 'extension-replaced'
-    detachAllTabDebuggers()
-    store.setState((state) => {
-      return { tabs: replaced ? new Map() : markAllTabsConnecting(state.tabs) }
-    })
-  }
-  logger.log('Remote control stopped, anchor tab', runtime.scope.anchorTabId)
+  void remoteCleanup.catch(() => {})
   return true
 }
 
@@ -3201,9 +3254,13 @@ async function restoreRemoteTunnelAfterRestart(): Promise<void> {
       return
     }
     if ('scope' in entry && entry.scope === 'browser') {
-      await startRemoteTunnel({ kind: 'browser', enrollment: { route: 'hosted', tabs: new Map() } }, {
-        tunnelId: entry.tunnelId,
-      })
+      await startRemoteTunnel(
+        { kind: 'browser' },
+        {
+          route: 'hosted',
+          tunnelId: entry.tunnelId,
+        },
+      )
       return
     }
     if (!('anchorTabId' in entry) || typeof entry.anchorTabId !== 'number') return
@@ -3225,6 +3282,7 @@ async function restoreRemoteTunnelAfterRestart(): Promise<void> {
       }),
     )
     await startRemoteControl(entry.anchorTabId, {
+      route: 'hosted',
       tunnelId: entry.tunnelId,
       remoteTabIds: existing.filter(isTruthy),
     })
@@ -3605,7 +3663,7 @@ async function onActionClicked(tab: chrome.tabs.Tab): Promise<void> {
   const { tabs, connectionState } = store.getState()
   const tabInfo = tabs.get(tab.id)
   const enrollment = browserEnrollment
-  if (enrollment?.route === 'hosted') {
+  if (isRemoteEnrollment(enrollment)) {
     void reconcileBrowserTab(tab.id)
     return
   }
@@ -3779,7 +3837,7 @@ function updateContextMenuVisibility(): void {
 
 function updateSharingMenus(): void {
   const sharing = remoteTunnel !== null || tailcatStarting
-  const tailcat = Boolean(remoteTunnel?.tailcat) || tailcatStarting
+  const tailcat = remoteTunnel?.route === 'tailcat' || tailcatStarting
   const canCopy = sharing && remoteTunnel?.scope.kind !== 'browser'
   updateMenus([
     [MENU.separator, { visible: sharing }],
@@ -4005,11 +4063,12 @@ async function copyRemoteText(options: { tabId: number; kind: 'prompt' | 'id' })
     return
   }
   if (runtime.scope.kind === 'browser') return
-  const text = runtime.tailcat
-    ? runtime.tunnel.url
-    : options.kind === 'prompt'
-      ? buildRemoteControlPrompt({ id: runtime.tunnelId })
-      : runtime.tunnelId
+  const text =
+    runtime.route === 'tailcat'
+      ? runtime.tunnel.url
+      : options.kind === 'prompt'
+        ? buildRemoteControlPrompt({ id: runtime.tunnelId })
+        : runtime.tunnelId
   if (!text) {
     await toastTab(options.tabId, 'Sharing is starting')
     return
@@ -4018,7 +4077,11 @@ async function copyRemoteText(options: { tabId: number; kind: 'prompt' | 'id' })
     await copyTextInOffscreenDocument(text)
     await toastTab(
       options.tabId,
-      runtime.tailcat ? 'Copied connection information' : options.kind === 'prompt' ? 'Copied prompt' : 'Copied id',
+      runtime.route === 'tailcat'
+        ? 'Copied connection information'
+        : options.kind === 'prompt'
+          ? 'Copied prompt'
+          : 'Copied id',
     )
   } catch (error) {
     logger.error('Remote control copy failed:', error)
@@ -4666,16 +4729,35 @@ let connectionSettingsError = ''
 
 async function stopRemoteForSettings(): Promise<void> {
   if (remoteTunnel || tailcatStarting) stopRemoteControl()
-  if (tailcatStopping) await tailcatDisposal
-  await browserRemoteCleanup
+  if (
+    remoteCleanup &&
+    !(await withTimeout(
+      remoteCleanup.then(
+        () => true,
+        () => false,
+      ),
+      10_000,
+      false,
+    ))
+  ) {
+    throw new ConfigurationError('ROUTE_CLEANUP_FAILED', 'Previous connection cleanup is incomplete')
+  }
+}
+
+function isRemoteOnline(runtime: RemoteTunnelRuntime): boolean {
+  return runtime.route === 'hosted'
+    ? runtime.status === 'online'
+    : runtime.scope.kind === 'browser'
+      ? runtime.tunnel.isReady
+      : runtime.status === 'ready' || runtime.status === 'connected'
 }
 
 async function getSettingsConnection(): Promise<ActiveConnection> {
   if (settingsTransition) return { kind: 'transition', phase: settingsTransition.kind, route: settingsTransition.route }
   const local = await connectionManager.localStatus()
   if (!remoteTunnel) return local
-  const { scope, tailcat, status } = remoteTunnel
-  const online = status === 'online' || status === 'ready' || status === 'connected'
+  const { scope, route } = remoteTunnel
+  const online = isRemoteOnline(remoteTunnel)
   if (scope.kind === 'browser') {
     const tabs = Array.from(scope.enrollment.tabs.keys()).filter(
       (tabId) => store.getState().tabs.get(tabId)?.state === 'connected',
@@ -4684,7 +4766,7 @@ async function getSettingsConnection(): Promise<ActiveConnection> {
   }
   return {
     kind: 'remote',
-    route: tailcat ? 'tailcat' : 'hosted',
+    route,
     scope: 'tab',
     online,
   }
@@ -4700,25 +4782,27 @@ async function handleConnectionSettings(request: ConnectionRequest): Promise<Con
     case 'select-server':
       connectionSettingsError = ''
       break
-    case 'copy-command': {
+    case 'copy-connection': {
       const runtime = remoteTunnel
-      if (settingsTransition || runtime?.scope.kind !== 'browser' || runtime.status !== 'online') {
+      if (settingsTransition || runtime?.scope.kind !== 'browser' || !isRemoteOnline(runtime)) {
         return { kind: 'error', message: 'The browser-wide connection is unavailable.' }
       }
-      return { kind: 'command', command: `playwriter session new --remote ${runtime.tunnelId}` }
+      return runtime.route === 'tailcat'
+        ? { kind: 'descriptor', descriptor: runtime.tunnel.url }
+        : { kind: 'command', command: `playwriter session new --remote ${runtime.tunnelId}` }
     }
     case 'connect': {
-      const { route } = preferences.pending
-      if (route === 'tailcat') {
-        return { kind: 'error', message: 'The selected route is unavailable in Connection settings.' }
-      }
-      if (route === 'hosted' && request.confirmedRoute !== 'hosted') {
-        return { kind: 'error', message: 'Confirm browser sharing before connecting.' }
+      const { route, tailcatServerId } = preferences.pending
+      if (route === 'tailcat' && tailcatServerId !== null) {
+        return { kind: 'error', message: 'Custom Tailcat servers are unavailable in Connection settings.' }
       }
       if (request.confirmedRoute && request.confirmedRoute !== route) {
         return { kind: 'error', message: 'The selected route changed. Choose a route and try again.' }
       }
-      if (settingsTransition || browserEnrollment?.route === route) break
+      if (route !== 'local' && request.confirmedRoute !== route) {
+        return { kind: 'error', message: 'Confirm browser sharing before connecting.' }
+      }
+      if (settingsTransition || connectionManager.changingLocalAccess || browserEnrollment?.route === route) break
       connectionSettingsError = ''
       settingsTransition = { kind: 'connecting', route }
       try {
@@ -4727,14 +4811,29 @@ async function handleConnectionSettings(request: ConnectionRequest): Promise<Con
           await connectionManager.connectFromSettings()
         } else {
           await connectionManager.disconnectFromSettings({ all: true })
-          await startRemoteTunnel({ kind: 'browser', enrollment: { route, tabs: new Map() } })
+          if (route === 'tailcat') {
+            if (__PLAYWRITER_TAILCAT_ENABLED__) {
+              await startRemoteTunnel({ kind: 'browser' }, { route, derpMapURL: PUBLIC_DERP_MAP })
+            } else {
+              connectionSettingsError = 'Tailcat assets are not included in this build. Use a Tailcat-enabled build.'
+            }
+          } else {
+            await startRemoteTunnel({ kind: 'browser' }, { route })
+          }
         }
-      } catch {
-        if (route === 'hosted') await stopRemoteForSettings()
-        connectionSettingsError =
-          route === 'local'
+      } catch (error) {
+        const cleanupFailed = error instanceof ConfigurationError && error.code === 'ROUTE_CLEANUP_FAILED'
+        const cleaned = cleanupFailed
+          ? false
+          : await stopRemoteForSettings().then(
+              () => true,
+              () => false,
+            )
+        connectionSettingsError = cleaned
+          ? route === 'local'
             ? 'Could not reach the local relay. Start Playwriter on this computer and try again.'
-            : 'Could not connect through playwriter.dev. Try again.'
+            : `Could not connect through ${route === 'tailcat' ? 'Public Tailcat' : 'playwriter.dev'}. Try again.`
+          : 'Previous connection cleanup is incomplete. Try again or reload the extension.'
       } finally {
         settingsTransition = undefined
       }
@@ -4742,7 +4841,7 @@ async function handleConnectionSettings(request: ConnectionRequest): Promise<Con
     }
     case 'disconnect': {
       if (settingsTransition) break
-      const route = remoteTunnel ? (remoteTunnel.tailcat ? 'tailcat' : 'hosted') : 'local'
+      const route = remoteTunnel?.route ?? 'local'
       connectionSettingsError = ''
       settingsTransition = { kind: 'disconnecting', route }
       try {
@@ -4751,6 +4850,8 @@ async function handleConnectionSettings(request: ConnectionRequest): Promise<Con
         } else {
           await connectionManager.disconnectFromSettings()
         }
+      } catch {
+        connectionSettingsError = 'Previous connection cleanup is incomplete. Try again or reload the extension.'
       } finally {
         settingsTransition = undefined
       }
@@ -4766,9 +4867,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (sender.id !== chrome.runtime.id || sender.url !== chrome.runtime.getURL(CONNECTION_SETTINGS_PAGE)) return false
     const request = parseConnectionRequest(message.request)
     if (!request) return false
-    void handleConnectionSettings(request).then(sendResponse, (error) => {
-      logger.debug('Connection settings request failed:', error)
-      sendResponse({ kind: 'error', message: 'Could not update Connection settings. Try again.' } satisfies ConnectionReply)
+    void handleConnectionSettings(request).then(sendResponse, () => {
+      logger.debug('Connection settings request failed')
+      sendResponse({
+        kind: 'error',
+        message: 'Could not update Connection settings. Try again.',
+      } satisfies ConnectionReply)
     })
     return true
   }
@@ -4808,8 +4912,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return false
       }
     }
+    const legacyTailcat = getLegacyTailcat()
     if (message.action === 'tailcatStop') {
-      if (remoteTunnel?.tailcat || tailcatStarting) stopRemoteControl()
+      if (legacyTailcat || tailcatStarting) stopRemoteControl()
       else if (!remoteTunnel && !tailcatCleanupFailed) tailcatFailure = null
       sendResponse({})
       return false
@@ -4822,17 +4927,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             ? 'stopping'
             : tailcatStarting
               ? 'starting'
-              : remoteTunnel?.tailcat
-                ? remoteTunnel.status
+              : legacyTailcat
+                ? legacyTailcat.status
                 : remoteTunnel
                   ? 'another share is active'
                   : tailcatFailure
                     ? 'failed'
                     : 'stopped',
-        active: Boolean(remoteTunnel?.tailcat) || tailcatStarting,
-        profileId: remoteTunnel?.profile?.id,
+        active: Boolean(legacyTailcat) || tailcatStarting,
+        profileId: legacyTailcat?.profileId,
         error: !__PLAYWRITER_TAILCAT_ENABLED__ ? 'DERP assets are not included in this build' : tailcatFailure,
-        descriptor: remoteTunnel?.tailcat ? remoteTunnel.tunnel.url : '',
+        descriptor: legacyTailcat?.tunnel.url ?? '',
       })
       return false
     }
@@ -4866,8 +4971,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         )
       return true
     }
-    if (import.meta.env.TESTING && message.action === 'tailcatTest' && remoteTunnel?.tunnel instanceof TailcatTunnel) {
-      const tunnel = remoteTunnel.tunnel
+    if (import.meta.env.TESTING && message.action === 'tailcatTest' && legacyTailcat) {
+      const { tunnel } = legacyTailcat
       if (message.command === 'trace') {
         sendResponse(tunnel.trace)
         return false
@@ -4878,7 +4983,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true
     }
     if (message.action === 'tailcatCopy') {
-      const text = remoteTunnel?.tailcat && remoteTunnel.status !== 'starting' ? remoteTunnel.tunnel.url : ''
+      const text = legacyTailcat && legacyTailcat.status !== 'starting' ? legacyTailcat.tunnel.url : ''
       void (text ? copyTextInOffscreenDocument(text) : Promise.reject(new Error('Share is not ready'))).then(
         () => sendResponse({}),
         () => sendResponse({ error: 'Copy failed' }),
@@ -4916,7 +5021,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       void withoutTailcatLogs(async () => {
         const profile = findProfile(await tailcatProfiles.read())
         if (epoch !== tailcatEpoch) throw new ConfigurationError('SHARE_REVOKED', 'Sharing was stopped')
-        await startRemoteControl(message.tabId, { tailcat: true, profile, deadline })
+        await startRemoteControl(message.tabId, {
+          route: 'tailcat',
+          derpMapURL: profile.derpMapURL,
+          profileId: profile.id,
+          deadline,
+        })
       }).then(
         () => {
           if (epoch === tailcatEpoch) tailcatStarting = false

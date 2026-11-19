@@ -175,7 +175,7 @@ dialog form {
   margin-top: 16px;
   text-align: right;
 }
-#copy-command {
+#copy-connection {
   margin-top: 8px;
 }
 :where(a, button, input, select):focus-visible {

@@ -32,7 +32,8 @@ Replace the two tool paths with your installed executables. Output:
   source revision/dirty flag and test-build flag.
 
 Use `--testing` only for fault-validation bundles. Test controls are compiled
-out of ordinary developer output. Hash verification of pinned assets:
+out of ordinary developer output. Set `PLAYWRITER_TAILCAT_ASSETS` to an existing
+asset directory when building to verify and reuse it. Hash verification of pinned assets:
 
 ```powershell
 node scripts/build-tailcat.mjs --verify --out dist/tailcat
@@ -44,9 +45,10 @@ node scripts/verify-tailcat-bundle.mjs
 
 1. In a disposable Edge profile, enable developer mode at `edge://extensions`
    and load `dist/public-derp/extension` unpacked. Keep personal profiles separate.
-2. Open a harmless HTTP fixture. Use Playwriter's browser menu to open public
-   sharing, select the fixture tab and click **Start sharing**. This needs public
-   DERP access and does not require a local relay. Ready means listening.
+2. Open a harmless HTTP fixture. In Playwriter's **Connection** settings, select
+   **Tailcat → Public Tailcat**, click **Connect**, and confirm **Share browser**.
+   Public Tailcat needs access to its public DERP relay. The developer controller
+   provides the CLI relay on the machine that connects to the browser.
 3. Click **Copy connection information** and save the JSON to a private file.
    It contains a bearer capability. Share privately; omit it from evidence/logs.
 4. Run the foreground controller in one PowerShell window:
@@ -69,7 +71,7 @@ fixture through a fresh manual connection before deciding whether to repeat it.
 
 ## Stop and cleanup
 
-Click **Stop sharing** in the extension control page or browser menu to revoke
+Click **Disconnect** in Connection settings or **Stop sharing** in the browser menu to revoke
 browser authority locally. It remains available when the fixture toolbar or
 controller is unavailable. A fresh Start creates a new key/descriptor. Network
 recovery never retries browser actions automatically.

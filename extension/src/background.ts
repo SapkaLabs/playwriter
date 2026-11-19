@@ -5,6 +5,7 @@ declare const __PLAYWRITER_VERSION__: string
 // Bundled automation builds should not burn a tab on the welcome page, especially
 // in headless/VPS flows where the extension is installed only to attach to the relay.
 declare const __PLAYWRITER_OPEN_WELCOME_PAGE__: boolean
+declare const __PLAYWRITER_AUTO_CONNECT_LOCAL__: boolean
 declare const __PLAYWRITER_TAILCAT_ENABLED__: boolean
 
 import dedent from 'string-dedent'
@@ -72,6 +73,16 @@ import {
 // Built by playwriter/scripts/build-client-bundles.ts, exposes globalThis.__bippy
 import bippyBundleCode from '../../playwriter/dist/bippy.js?raw'
 import type { OffscreenCopyTextResult, OffscreenPlaySoundResult, SoundName } from './offscreen-types'
+import {
+  CONNECTION_SETTINGS_PAGE,
+  TAILCAT_PROFILES_KEY,
+  getConnectionPreferences,
+  parseConnectionRequest,
+  type ActiveConnection,
+  type ConnectionReply,
+  type ConnectionRequest,
+  type LocalConnection,
+} from './connection-settings'
 
 function isTruthy<T>(value: T): value is NonNullable<T> {
   return Boolean(value)
@@ -350,9 +361,9 @@ async function withoutTailcatLogs<T>(operation: () => Promise<T>): Promise<T> {
 }
 let tailcatFailure: string | null = null
 const tailcatProfiles = new ProfileStore({
-  read: async () => (await chrome.storage.local.get('tailcatProfiles')).tailcatProfiles,
+  read: async () => (await chrome.storage.local.get(TAILCAT_PROFILES_KEY))[TAILCAT_PROFILES_KEY],
   write: async (value) => {
-    await chrome.storage.local.set({ tailcatProfiles: value })
+    await chrome.storage.local.set({ [TAILCAT_PROFILES_KEY]: value })
   },
 })
 let tailcatEpoch = 0
@@ -413,17 +424,123 @@ function markAllTabsConnecting(tabs: Map<number, TabInfo>): Map<number, TabInfo>
   )
 }
 
+// A Local grant survives worker suspension. The pending choice survives browser restarts separately.
+const LOCAL_ACCESS_KEY = 'playwriterLocalAccess'
+const LOCAL_ACCESS_STOPPED = 'Local access was disconnected.'
+
 class ConnectionManager {
   ws: WebSocket | null = null
+  private pendingSocket: WebSocket | null = null
   private connectionPromise: Promise<void> | null = null
   // Monotonic id bumped on every connect(). The global timeout in ensureConnection()
   // does NOT cancel a losing connect(), so a stale socket's late onopen could otherwise
   // clobber `this.ws` of a newer attempt. Every socket callback checks this id and goes
   // inert if it belongs to a superseded attempt. Fixes the connect/disconnect loop (#40).
   private currentAttemptId = 0
+  private accessAllowed = false
+  private readonly accessReady = chrome.storage.session
+    .get(LOCAL_ACCESS_KEY)
+    .then((stored) => {
+      const allowed: unknown = stored[LOCAL_ACCESS_KEY]
+      this.accessAllowed =
+        typeof allowed === 'boolean' ? allowed : __PLAYWRITER_AUTO_CONNECT_LOCAL__ || import.meta.env.TESTING
+    })
+    .catch((error) => logger.debug('Could not restore Local access:', error))
+  private transition: 'connecting' | 'disconnecting' | undefined
+  private revocationCount = 0
   preserveTabsOnDetach = false
 
+  get revocation(): number {
+    return this.revocationCount
+  }
+
+  get allowsLocalAccess(): boolean {
+    return this.accessAllowed
+  }
+
+  get changingLocalAccess(): boolean {
+    return this.transition !== undefined
+  }
+
+  async localStatus(): Promise<LocalConnection> {
+    await this.accessReady
+    if (this.transition) return { kind: this.transition }
+    if (!this.accessAllowed) return { kind: 'disconnected' }
+    if (this.ws?.readyState !== WebSocket.OPEN || this.connectionPromise) return { kind: 'reconnecting' }
+    const tabs = Array.from(store.getState().tabs.values()).filter((tab) => tab.state === 'connected').length
+    return { kind: 'connected', tabs }
+  }
+
+  async allowFromTab(): Promise<boolean> {
+    await this.accessReady
+    if (this.transition) return false
+    if (!this.accessAllowed) {
+      const revocation = this.revocation
+      await chrome.storage.session.set({ [LOCAL_ACCESS_KEY]: true })
+      if (revocation !== this.revocation || this.transition) return false
+      this.accessAllowed = true
+    }
+    return true
+  }
+
+  async connectFromSettings(): Promise<void> {
+    await this.accessReady
+    if (this.transition) return
+    this.transition = 'connecting'
+    try {
+      await stopRemoteForSettings()
+      this.accessAllowed = true
+      if (store.getState().connectionState === 'extension-replaced') {
+        store.setState({ connectionState: 'idle', errorText: undefined })
+      }
+      await this.ensureConnection()
+      await chrome.storage.session.set({ [LOCAL_ACCESS_KEY]: true })
+      store.setState({ connectionState: 'connected', errorText: undefined })
+      this.preserveTabsOnDetach = false
+    } catch (error) {
+      await this.revokeAccess()
+      throw error
+    } finally {
+      this.transition = undefined
+    }
+  }
+
+  async disconnectFromSettings(): Promise<void> {
+    await this.accessReady
+    if (this.transition) return
+    this.transition = 'disconnecting'
+    try {
+      await this.revokeAccess()
+    } finally {
+      this.transition = undefined
+    }
+  }
+
+  private async revokeAccess(): Promise<void> {
+    this.accessAllowed = false
+    this.revocationCount++
+    this.currentAttemptId++
+    const socket = this.pendingSocket ?? this.ws
+    this.pendingSocket = this.ws = null
+    this.connectionPromise = null
+    socket?.close()
+    this.preserveTabsOnDetach = false
+    recorderActive = false
+    skillRecordingId = null
+    setRecorderStateInAllTabs(false)
+    store.setState({ connectionState: 'idle', errorText: undefined })
+    const detach = remoteTunnel === null
+      ? Promise.allSettled([
+        ...Array.from(store.getState().tabs.keys(), (tabId) => detachTab(tabId, true)),
+        ...inFlightTabAttaches.values(),
+      ])
+      : Promise.resolve([])
+    await Promise.all([chrome.storage.session.set({ [LOCAL_ACCESS_KEY]: false }), withTimeout(detach, 3000, [])])
+  }
+
   async ensureConnection(): Promise<void> {
+    await this.accessReady
+    if (!this.accessAllowed) throw new Error(LOCAL_ACCESS_STOPPED)
     // Reuse in-progress connection attempt - prevents races between user clicks and maintain loop
     if (this.connectionPromise) {
       return this.connectionPromise
@@ -441,30 +558,35 @@ class ConnectionManager {
     // This protects against edge cases where individual timeouts don't fire
     // (e.g., DNS resolution hangs, AbortSignal doesn't work, etc.)
     const GLOBAL_TIMEOUT_MS = 15000
-    this.connectionPromise = Promise.race([
+    let timeout: ReturnType<typeof setTimeout> | undefined
+    const attempt = Promise.race([
       this.connect(),
       new Promise<never>((_, reject) => {
-        setTimeout(() => {
+        timeout = setTimeout(() => {
           reject(new Error('Connection timeout (global)'))
         }, GLOBAL_TIMEOUT_MS)
       }),
     ])
+    this.connectionPromise = attempt
 
     try {
-      await this.connectionPromise
+      await attempt
     } finally {
-      this.connectionPromise = null
+      clearTimeout(timeout)
+      if (this.connectionPromise === attempt) this.connectionPromise = null
     }
   }
 
   private async connect(): Promise<void> {
     const attemptId = ++this.currentAttemptId
+    const isCurrent = () => attemptId === this.currentAttemptId && this.accessAllowed
     logger.debug(`Waiting for server at http://${RELAY_HOST}:${RELAY_PORT}...`)
 
     // Retry for up to 5 seconds with 1s intervals, then give up (maintain loop will retry later)
     // Using fewer attempts since maintainLoop retries every 3 seconds anyway
     const maxAttempts = 5
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (!isCurrent()) throw new Error(LOCAL_ACCESS_STOPPED)
       try {
         await fetch(`http://${RELAY_HOST}:${RELAY_PORT}`, { method: 'HEAD', signal: AbortSignal.timeout(2000) })
         logger.debug('Server is available')
@@ -479,6 +601,7 @@ class ConnectionManager {
     }
 
     const identity = await getExtensionIdentity()
+    if (!isCurrent()) throw new Error(LOCAL_ACCESS_STOPPED)
     const relayUrl = new URL(`ws://${RELAY_HOST}:${RELAY_PORT}/extension`)
     if (identity.browser) {
       relayUrl.searchParams.set('browser', identity.browser)
@@ -498,6 +621,14 @@ class ConnectionManager {
     relayUrl.searchParams.set('capabilities', INVENTORY_READY_CAPABILITY)
     logger.debug('Creating WebSocket connection to:', relayUrl)
     const socket = new WebSocket(relayUrl.toString())
+    this.pendingSocket = socket
+    const isSocketCurrent = () => isCurrent() && this.ws === socket && socket.readyState === WebSocket.OPEN
+    const sink: RelayMessageSink = {
+      isCurrent: isSocketCurrent,
+      send(message) {
+        if (isSocketCurrent()) sendToLocalRelay(message)
+      },
+    }
 
     await new Promise<void>((resolve, reject) => {
       let settled = false
@@ -523,15 +654,16 @@ class ConnectionManager {
       }
 
       socket.onmessage = async (event: MessageEvent) => {
+        if (!isSocketCurrent()) return
         let message: any
         try {
           message = JSON.parse(event.data)
         } catch (error: any) {
           logger.debug('Error parsing message:', error)
-          sendToLocalRelay({ error: { code: -32700, message: `Error parsing message: ${error.message}` } })
+          sink.send({ error: { code: -32700, message: `Error parsing message: ${error.message}` } })
           return
         }
-        await dispatchRelayMessage(message, localRelaySink)
+        await dispatchRelayMessage(message, sink)
       }
 
       socket.onerror = (event: Event) => {
@@ -540,6 +672,7 @@ class ConnectionManager {
       }
 
       socket.onclose = (event: CloseEvent) => {
+        if (this.pendingSocket === socket) this.pendingSocket = null
         logger.debug('WebSocket closed:', { code: event.code, reason: event.reason })
         const error =
           event.code === 4002 || event.reason === 'Extension Already In Use'
@@ -559,7 +692,7 @@ class ConnectionManager {
         if (settled) return
         // A superseded attempt (its global timeout already fired and a newer connect()
         // started) must not install its socket as the live connection. Close and go inert.
-        if (attemptId !== this.currentAttemptId) {
+        if (!isCurrent()) {
           try {
             socket.close()
           } catch {}
@@ -574,7 +707,7 @@ class ConnectionManager {
         void completeLocalRelayHandshake(socket).then(
           () => {
             if (settled) return
-            if (attemptId !== this.currentAttemptId) {
+            if (!isCurrent()) {
               try {
                 socket.close()
               } catch {}
@@ -657,8 +790,9 @@ class ConnectionManager {
   }
 
   async maintainLoop(): Promise<void> {
+    await this.accessReady
     while (true) {
-      if (this.ws?.readyState === WebSocket.OPEN) {
+      if (!this.accessAllowed || this.transition || this.ws?.readyState === WebSocket.OPEN) {
         await sleep(1000)
         continue
       }
@@ -713,11 +847,14 @@ class ConnectionManager {
       // Try to connect silently in background - don't show 'connecting' badge
       // Individual tab states will show 'connecting' when user explicitly clicks
       try {
+        const revocation = this.revocation
         await this.ensureConnection()
-        store.setState({ connectionState: 'connected' })
-
-        this.preserveTabsOnDetach = false
+        if (this.accessAllowed && revocation === this.revocation) {
+          store.setState({ connectionState: 'connected' })
+          this.preserveTabsOnDetach = false
+        }
       } catch (error: any) {
+        if (!this.accessAllowed) continue
         logger.debug('Connection attempt failed:', error.message)
         // Check if rejected because another extension is actively in use
         if (error.message === 'Extension Already In Use') {
@@ -874,8 +1011,6 @@ function sendToLocalRelay(message: any): void {
   }
 }
 
-const localRelaySink: RelayMessageSink = { send: sendToLocalRelay }
-
 function resolveTabGroupKey({ key, remote }: { key: string | undefined; remote: boolean }): string | undefined {
   if (!key) {
     return undefined
@@ -906,8 +1041,8 @@ export function sendMessage(message: any): void {
 async function dispatchRelayMessage(message: any, sink: RelayMessageSink): Promise<void> {
   if (sink.isCurrent && !sink.isCurrent()) return
   const assertActive = () => {
-    if (sink.remoteRuntime && (remoteTunnel !== sink.remoteRuntime || (sink.isCurrent && !sink.isCurrent()))) {
-      throw new Error(REMOTE_CONTROL_STOPPED_ERROR)
+    if ((sink.remoteRuntime && remoteTunnel !== sink.remoteRuntime) || (sink.isCurrent && !sink.isCurrent())) {
+      throw new Error(sink.remoteRuntime ? REMOTE_CONTROL_STOPPED_ERROR : LOCAL_ACCESS_STOPPED)
     }
   }
   // Handle ping from server - respond with pong to keep service worker alive
@@ -966,11 +1101,12 @@ async function dispatchRelayMessage(message: any, sink: RelayMessageSink): Promi
       assertActive()
       const tab = await createTabInPreferredWindow({ url: 'about:blank', active: false, assertActive })
       if (tab.id) {
+        assertActive()
         const tabId = tab.id
         setTabConnecting(tabId, { groupTitle, groupKey, groupColor })
         const attach = () => {
           assertActive()
-          return attachTab(tabId, { skipAttachedEvent: true })
+          return attachTab(tabId, { skipAttachedEvent: true, assertActive })
         }
         const { targetInfo, sessionId } = sink.remoteRuntime
           ? await attachForRemote({ runtime: sink.remoteRuntime, tabId, attach })
@@ -1158,11 +1294,11 @@ async function dispatchRelayMessage(message: any, sink: RelayMessageSink): Promi
     // Auto-connect tabs created via ghostPublicAPI.openTab so they appear in context.pages()
     if (result.success && params.namespace === 'ghostPublicAPI' && params.method === 'openTab') {
       const tabId = result.result as number
-      if (tabId) {
+      if (tabId && (!sink.isCurrent || sink.isCurrent())) {
         logger.debug('Auto-connecting Ghost Browser tab:', tabId)
         setTabConnecting(tabId)
         await sleep(100)
-        await attachTab(tabId)
+        if (!sink.isCurrent || sink.isCurrent()) await attachTab(tabId, { assertActive })
       }
     }
     sink.send({ id: message.id, result })
@@ -1503,6 +1639,13 @@ async function handleCommand(
     }
   }
 
+  if (msg.params.method === 'Target.createTarget' || msg.params.method === 'Page.navigate') {
+    const navigationError = getBlockedNavigationError(msg.params.params?.url || 'about:blank')
+    if (navigationError) {
+      throw new Error(navigationError)
+    }
+  }
+
   const resolved = getTabForCommand(msg)
   let targetTabId = resolved?.tabId
   let targetTab = resolved?.tab
@@ -1590,13 +1733,14 @@ async function handleCommand(
       assertActive()
       const tab = await createTabInPreferredWindow({ url, active: false, assertActive })
       if (!tab.id) throw new Error('Failed to create tab')
+      assertActive()
       const tabId = tab.id
       setTabConnecting(tabId, { groupTitle, groupKey, groupColor })
       logger.debug('Created tab:', tabId, 'waiting for it to load...')
       await sleep(100)
       const attach = () => {
         assertActive()
-        return attachTab(tabId)
+        return attachTab(tabId, { assertActive })
       }
       const { targetInfo } = remoteRuntime
         ? await attachForRemote({ runtime: remoteRuntime, tabId, attach })
@@ -1828,6 +1972,7 @@ function onDebuggerDetach(source: chrome.debugger.Debuggee, reason: `${chrome.de
 const tabReattaches = new Map<number, Promise<boolean>>()
 
 async function reattachTab({ tabId, tab }: { tabId: number; tab: TabInfo }): Promise<boolean> {
+  const revocation = connectionManager.revocation
   const { sessionId, targetId } = tab
   if (!sessionId || !targetId) {
     return false
@@ -1851,6 +1996,7 @@ async function reattachTab({ tabId, tab }: { tabId: number; tab: TabInfo }): Pro
   try {
     await chrome.tabs.get(tabId)
     await removeRestrictedIframes(tabId)
+    if (revocation !== connectionManager.revocation && remoteTunnel === null) return false
     const { targetInfo } = await attachTab(tabId, { skipAttachedEvent: true, sessionId })
     if (targetInfo.targetId !== targetId) {
       throw new Error(`targetId changed after reattach: ${targetId} -> ${targetInfo.targetId}`)
@@ -1954,8 +2100,31 @@ const inFlightTabAttaches = new Map<number, Promise<AttachTabResult>>()
 
 type AttachTabOptions = {
   skipAttachedEvent?: boolean
+  assertActive?(): void
   // Reuse the Playwright sessionId of a tab Chrome detached unexpectedly (see reattachTab).
   sessionId?: string
+}
+
+// getBlockedNavigationError stops clients from adding our extension pages to history, but a tab
+// can already hold one (the welcome tab the user kept browsing in). history.back() would then
+// load it with client init scripts and extension privileges, so clear such entries before any
+// client sees the tab. Throws if the tab is on an extension page right now.
+async function removeExtensionPagesFromHistory(debuggee: chrome.debugger.Debuggee): Promise<void> {
+  const { currentIndex, entries } = (await chrome.debugger.sendCommand(
+    debuggee,
+    'Page.getNavigationHistory',
+  )) as Protocol.Page.GetNavigationHistoryResponse
+  const isExtensionPage = (entry: Protocol.Page.NavigationEntry) => {
+    return entry.url.startsWith('chrome-extension://')
+  }
+  const current = entries[currentIndex]
+  if (current && isExtensionPage(current)) {
+    throw new Error('Cannot attach to an extension page')
+  }
+  if (entries.some(isExtensionPage)) {
+    logger.warn('Clearing tab history that contains an extension page:', debuggee.tabId)
+    await chrome.debugger.sendCommand(debuggee, 'Page.resetNavigationHistory')
+  }
 }
 
 function attachTab(tabId: number, options: AttachTabOptions = {}): Promise<AttachTabResult> {
@@ -1972,9 +2141,11 @@ function attachTab(tabId: number, options: AttachTabOptions = {}): Promise<Attac
 
 async function attachTabDebugger(
   tabId: number,
-  { skipAttachedEvent = false, sessionId: reusedSessionId }: AttachTabOptions = {},
+  { skipAttachedEvent = false, sessionId: reusedSessionId, assertActive }: AttachTabOptions = {},
 ): Promise<AttachTabResult> {
   const debuggee = { tabId }
+  const revocation = connectionManager.revocation
+  const startedWithoutRemote = remoteTunnel === null
   let debuggerAttached = false
 
   try {
@@ -2007,6 +2178,7 @@ async function attachTabDebugger(
     logger.debug('Debugger attached successfully to tab:', tabId)
 
     await chrome.debugger.sendCommand(debuggee, 'Page.enable')
+    await removeExtensionPagesFromHistory(debuggee)
 
     // Reapply cached auto-attach for new tabs so OOPIF targets are reported immediately.
     if (autoAttachParams) {
@@ -2023,6 +2195,8 @@ async function attachTabDebugger(
     )) as Protocol.Target.GetTargetInfoResponse
 
     const targetInfo = result.targetInfo
+    assertActive?.()
+    if (startedWithoutRemote && revocation !== connectionManager.revocation) throw new Error(LOCAL_ACCESS_STOPPED)
 
     // Log error if URL is empty - this causes Playwright to create broken pages
     if (!targetInfo.url || targetInfo.url === '' || targetInfo.url === ':') {
@@ -2092,13 +2266,13 @@ async function attachTabDebugger(
     // Clean up debugger if we attached but failed later
     if (debuggerAttached) {
       logger.debug('Cleaning up debugger after partial attach failure:', tabId)
-      chrome.debugger.detach(debuggee).catch(() => {})
+      await chrome.debugger.detach(debuggee).catch(() => {})
     }
     throw error
   }
 }
 
-function detachTab(tabId: number, shouldDetachDebugger: boolean): void {
+function detachTab(tabId: number, shouldDetachDebugger: boolean): Promise<void> | undefined {
   const tab = store.getState().tabs.get(tabId)
   if (!tab) {
     logger.debug('detachTab: tab not found in map:', tabId)
@@ -2150,7 +2324,7 @@ function detachTab(tabId: number, shouldDetachDebugger: boolean): void {
   emitChildDetachesForTab(tabId)
 
   if (shouldDetachDebugger) {
-    chrome.debugger.detach({ tabId }).catch((err) => {
+    return chrome.debugger.detach({ tabId }).catch((err) => {
       logger.debug('Error detaching debugger from tab:', tabId, err.message)
     })
   }
@@ -2254,6 +2428,8 @@ async function connectTab(
   tabId: number,
   options?: { groupTitle?: string; groupKey?: string; groupColor?: chrome.tabGroups.ColorEnum },
 ): Promise<void> {
+  if (!connectionManager.allowsLocalAccess && remoteTunnel === null) return
+  const revocation = connectionManager.revocation
   try {
     logger.debug(`Starting connection to tab ${tabId}`)
 
@@ -2267,6 +2443,7 @@ async function connectTab(
       // connection stays best-effort in the background.
       void connectionManager.ensureConnection().catch(() => {})
     }
+    if (revocation !== connectionManager.revocation && remoteTunnel === null) return
     // The relay handshake inside ensureConnection re-attaches 'connecting' tabs,
     // including this one. Attaching again would fail on the live debugger.
     if (store.getState().tabs.get(tabId)?.state === 'connected') {
@@ -2277,6 +2454,7 @@ async function connectTab(
 
     logger.debug(`Successfully connected to tab ${tabId}`)
   } catch (error: any) {
+    if (revocation !== connectionManager.revocation && remoteTunnel === null) return
     logger.debug(`Failed to connect to tab ${tabId}:`, error)
 
     // Distinguish between WS connection errors and tab-specific errors
@@ -2375,7 +2553,7 @@ async function disconnectTab(tabId: number): Promise<void> {
     return
   }
 
-  detachTab(tabId, true)
+  void detachTab(tabId, true)
   // WS connection is maintained even with no tabs - maintainConnection handles it
 }
 
@@ -2539,14 +2717,18 @@ async function announceConnectedTabsToLocalRelay(socket = connectionManager.ws):
 
 async function completeLocalRelayHandshake(socket: WebSocket): Promise<void> {
   await announceConnectedTabsToLocalRelay(socket)
-  await reattachConnectingTabsToLocalRelay()
-  if (connectionManager.ws !== socket || socket.readyState !== WebSocket.OPEN) {
-    throw new Error('Local relay connection changed during target inventory')
+  const assertActive = () => {
+    if (connectionManager.ws !== socket || socket.readyState !== WebSocket.OPEN) {
+      throw new Error('Local relay connection changed during target inventory')
+    }
   }
+  assertActive()
+  await reattachConnectingTabsToLocalRelay(assertActive)
+  assertActive()
   socket.send(JSON.stringify({ method: 'ready' }))
 }
 
-async function reattachConnectingTabsToLocalRelay(): Promise<void> {
+async function reattachConnectingTabsToLocalRelay(assertActive: () => void): Promise<void> {
   const tabsToReattach = Array.from(store.getState().tabs.entries())
     .filter(([_, tab]) => tab.state === 'connecting')
     .map(([tabId]) => tabId)
@@ -2559,10 +2741,12 @@ async function reattachConnectingTabsToLocalRelay(): Promise<void> {
       }
       try {
         await chrome.tabs.get(tabId)
-        await attachTab(tabId)
+        assertActive()
+        await attachTab(tabId, { assertActive })
         logger.debug('Successfully re-attached tab:', tabId)
       } catch (error) {
         logger.debug('Failed to re-attach tab:', tabId, error instanceof Error ? error.message : String(error))
+        if (store.getState().tabs.get(tabId) !== currentTab) return
         store.setState((state) => {
           const newTabs = new Map(state.tabs)
           newTabs.delete(tabId)
@@ -2598,8 +2782,14 @@ async function startRemoteControl(
     deadline?: number
   } = {},
 ): Promise<{ url: string; started: boolean; id: string }> {
-  if (tailcatStopping || tailcatCleanupFailed || (!options.tailcat && (tailcatStarting || tailcatChanging)))
+  if (
+    connectionManager.changingLocalAccess ||
+    tailcatStopping ||
+    tailcatCleanupFailed ||
+    (!options.tailcat && (tailcatStarting || tailcatChanging))
+  ) {
     throw new Error('Sharing transition in progress')
+  }
   if (remoteTunnel) {
     setRemoteStateInAllTabs(true)
     return { url: remoteTunnel.tunnel.url, started: false, id: remoteTunnel.tunnelId }
@@ -2870,7 +3060,7 @@ async function resetDebugger(): Promise<void> {
   )
 }
 
-// Our extension IDs - allow attaching to our own extension pages for debugging
+// Our extension IDs: removeRestrictedIframes keeps our own iframes
 const OUR_EXTENSION_IDS = [
   'jfeammnjpkecdekppnclgkkffahnhfhe', // Production extension (Chrome Web Store)
   'pebbngnfojnignonigcnkdilknapkgid', // Dev extension (stable ID from manifest key)
@@ -2878,23 +3068,35 @@ const OUR_EXTENSION_IDS = [
 
 // undefined URL is for about:blank pages (not restricted) and chrome:// URLs (restricted).
 // We can't distinguish them without the `tabs` permission, so we just let attachment fail.
+// Our own extension pages are restricted too: chrome.debugger may attach to them, and a CDP
+// client there would run with this extension's privileges (debugger on every tab, storage).
 function isRestrictedUrl(url: string | undefined): boolean {
   if (!url) return false
 
-  // Allow our own extension pages, block all other extensions
-  if (url.startsWith('chrome-extension://')) {
-    const extensionId = url.replace('chrome-extension://', '').split('/')[0]
-    return !OUR_EXTENSION_IDS.includes(extensionId)
-  }
-
   const restrictedPrefixes = [
     'chrome://',
+    'chrome-extension://',
     'devtools://',
     'edge://',
     'https://chrome.google.com/',
     'https://chromewebstore.google.com/',
   ]
   return restrictedPrefixes.some((prefix) => url.startsWith(prefix))
+}
+
+/**
+ * Error for a URL a CDP client may not open with Target.createTarget or Page.navigate, or null.
+ * Our extension pages would give the client extension privileges that outlive Stop sharing.
+ * chrome.tabs.create resolves relative URLs against our extension origin, so only absolute URLs pass.
+ */
+function getBlockedNavigationError(url: string): string | null {
+  if (!URL.canParse(url)) {
+    return `Cannot open "${url}": pass an absolute URL.`
+  }
+  if (new URL(url).protocol === 'chrome-extension:') {
+    return 'Playwriter clients cannot open extension pages.'
+  }
+  return null
 }
 
 const icons = {
@@ -3073,6 +3275,7 @@ async function onActionClicked(tab: chrome.tabs.Tab): Promise<void> {
 
   // If another Playwriter extension took over, clear error state and try to reconnect this tab
   if (connectionState === 'extension-replaced') {
+    if (!(await connectionManager.allowFromTab())) return
     logger.debug('Clearing extension-replaced state, attempting to reconnect')
     store.setState({ connectionState: 'idle', errorText: undefined })
     await connectTab(tab.id)
@@ -3092,7 +3295,7 @@ async function onActionClicked(tab: chrome.tabs.Tab): Promise<void> {
 
   if (tabInfo?.state === 'connected') {
     await disconnectTab(tab.id)
-  } else {
+  } else if (await connectionManager.allowFromTab()) {
     await connectTab(tab.id)
   }
 }
@@ -3369,7 +3572,7 @@ async function copyElementLocator(options: {
   const tabState = store.getState().tabs.get(tabId)?.state
   if (tabState !== 'connected' && tabState !== 'connecting') {
     // Not awaited: without a running relay the tab waits in 'connecting'.
-    void connectTab(tabId)
+    if (await connectionManager.allowFromTab()) void connectTab(tabId)
   }
   const code = buildPinnedElementInspectionCode({ pinName: `playwriterPinnedElem${pinNumber}`, url: tab.url || '' })
   await copyTextInOffscreenDocument("playwriter -e '" + code + "'")
@@ -4079,8 +4282,69 @@ function playSound(sound: SoundName): void {
     })
 }
 
+let localSettingsError = ''
+
+async function stopRemoteForSettings(): Promise<void> {
+  if (remoteTunnel || tailcatStarting) stopRemoteControl()
+  if (tailcatStopping) await tailcatDisposal
+}
+
+async function getSettingsConnection(): Promise<ActiveConnection> {
+  const local = await connectionManager.localStatus()
+  if (!remoteTunnel || local.kind === 'connecting' || local.kind === 'disconnecting') return local
+  const { tailcat, status } = remoteTunnel
+  return {
+    kind: 'remote',
+    route: tailcat ? 'tailcat' : 'hosted',
+    online: status === 'online' || status === 'ready' || status === 'connected',
+  }
+}
+
+async function handleConnectionSettings(request: ConnectionRequest): Promise<ConnectionReply> {
+  const preferences = await getConnectionPreferences(request)
+  switch (request.kind) {
+    case 'status':
+      break
+    case 'select':
+    case 'select-server':
+      localSettingsError = ''
+      break
+    case 'connect':
+      if (preferences.pending.route !== 'local') {
+        return { kind: 'error', message: 'The selected route is unavailable in Connection settings.' }
+      }
+      localSettingsError = ''
+      try {
+        await connectionManager.connectFromSettings()
+      } catch (error) {
+        logger.debug('Could not connect from settings:', error)
+        localSettingsError = 'Could not reach the local relay. Start Playwriter on this computer and try again.'
+      }
+      break
+    case 'disconnect':
+      localSettingsError = ''
+      if (remoteTunnel || tailcatStarting) {
+        await stopRemoteForSettings()
+      } else {
+        await connectionManager.disconnectFromSettings()
+      }
+      break
+  }
+  return { kind: 'status', preferences, connection: await getSettingsConnection(), error: localSettingsError }
+}
+
 // Handle messages from the in-page toolbar
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.action === 'connectionSettings') {
+    if (sender.id !== chrome.runtime.id || sender.url !== chrome.runtime.getURL(CONNECTION_SETTINGS_PAGE)) return false
+    const request = parseConnectionRequest(message.request)
+    if (!request) return false
+    void handleConnectionSettings(request).then(sendResponse, (error) => {
+      logger.debug('Connection settings request failed:', error)
+      sendResponse({ kind: 'error', message: 'Could not update Connection settings. Try again.' } satisfies ConnectionReply)
+    })
+    return true
+  }
   if (typeof message.action === 'string' && message.action.startsWith('tailcat')) {
     if (
       sender.id !== chrome.runtime.id ||
@@ -4338,6 +4602,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   return false
+})
+
+// Only for a user typing an extension URL into an attached tab: getBlockedNavigationError and
+// removeExtensionPagesFromHistory are the boundary, this detach runs after the page loads.
+chrome.webNavigation.onCommitted.addListener((details) => {
+  if (details.frameId !== 0 || !details.url.startsWith('chrome-extension://')) {
+    return
+  }
+  if (!store.getState().tabs.has(details.tabId)) {
+    return
+  }
+  logger.warn('Detaching tab that navigated to an extension page:', details.tabId)
+  detachTab(details.tabId, true)
 })
 
 // Re-inject the toolbar after hard navigations in connected tabs.

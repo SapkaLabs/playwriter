@@ -55,6 +55,8 @@ async function main(): Promise<void> {
       ...process.env,
       PLAYWRITER_EXTENSION_DIST: extensionOutDirName,
       PLAYWRITER_OPEN_WELCOME_PAGE: '0',
+      // `playwriter browser start` explicitly launches this build for Local automation.
+      PLAYWRITER_AUTO_CONNECT_LOCAL: '1',
     },
   })
 

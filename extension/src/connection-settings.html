@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Connection settings · Playwriter</title>
+    <link rel="stylesheet" href="./connection-settings.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <strong>Playwriter</strong>
+        <nav aria-label="Settings">
+          <a href="./connection-settings.html" aria-current="page">Connection</a>
+          <span class="muted">Manage Servers · Coming later</span>
+        </nav>
+      </header>
+      <h1>Connection</h1>
+      <section class="status" aria-label="Current connection">
+        <div class="status-top">
+          <p class="status-name">
+            <span class="dot" aria-hidden="true"></span><span id="state" role="status">Loading…</span>
+          </p>
+          <button id="disconnect" type="button" hidden>Disconnect</button>
+        </div>
+        <p id="detail" class="muted"></p>
+      </section>
+      <fieldset disabled>
+        <legend>Choose a route</legend>
+        <label class="route">
+          <input type="radio" name="route" value="local" aria-labelledby="local" aria-describedby="local-detail" />
+          <span
+            ><strong id="local">Local</strong
+            ><small id="local-detail"
+              >Use the relay on this computer. Click the Playwriter icon on a tab to attach it.</small
+            ></span
+          >
+        </label>
+        <label class="route">
+          <input type="radio" name="route" value="hosted" aria-labelledby="hosted" aria-describedby="hosted-detail" />
+          <span
+            ><strong id="hosted">playwriter.dev</strong
+            ><small id="hosted-detail">Sharing in Connection settings is coming later.</small></span
+          >
+        </label>
+        <label class="route">
+          <input
+            type="radio"
+            name="route"
+            value="tailcat"
+            aria-labelledby="tailcat"
+            aria-describedby="tailcat-detail"
+          />
+          <span
+            ><strong id="tailcat">Tailcat</strong
+            ><small id="tailcat-detail">Sharing in Connection settings is coming later.</small></span
+          >
+        </label>
+        <label id="server-choice" hidden
+          >Tailcat server
+          <select id="server"></select
+        ></label>
+      </fieldset>
+      <p id="pending" class="muted" role="status"></p>
+      <p id="error" role="alert"></p>
+      <button id="connect" type="button" disabled>Connect</button>
+    </main>
+    <script type="module" src="./connection-settings-page.ts"></script>
+  </body>
+</html>

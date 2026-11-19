@@ -17,6 +17,7 @@ const defineEnv: Record<string, string> = {
   'process.env.PLAYWRITER_PORT': JSON.stringify(process.env.PLAYWRITER_PORT || '19988'),
   __PLAYWRITER_VERSION__: JSON.stringify(playwriterPkg.version),
   __PLAYWRITER_OPEN_WELCOME_PAGE__: JSON.stringify(process.env.PLAYWRITER_OPEN_WELCOME_PAGE !== '0'),
+  __PLAYWRITER_AUTO_CONNECT_LOCAL__: JSON.stringify(process.env.PLAYWRITER_AUTO_CONNECT_LOCAL === '1'),
 }
 if (process.env.TESTING) {
   defineEnv['import.meta.env.TESTING'] = 'true'
@@ -80,6 +81,7 @@ export default defineConfig({
         offscreen: resolve(__dirname, 'src/offscreen.html'),
         welcome: resolve(__dirname, 'src/welcome.html'),
         tutorial: resolve(__dirname, 'src/tutorial.html'),
+        'connection-settings': resolve(__dirname, 'src/connection-settings.html'),
         'tailcat-share': resolve(__dirname, 'src/tailcat-share.html'),
       },
       output: {

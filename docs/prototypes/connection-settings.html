@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Playwriter connection settings prototype</title>
+<style>
+html { color-scheme: light dark; }
+body { margin: 0; color: var(--foreground, CanvasText); font: 15px/1.45 "Segoe UI", system-ui, sans-serif; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+.shell { max-width: 720px; margin: auto; }
+header { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border, #8792a3); }
+.brand { font-size: 17px; font-weight: 700; }
+nav, .actions, .demo, .manager-top, .status-top { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+nav a { color: inherit; border-radius: 5px; padding: 4px 8px; text-underline-offset: 4px; text-decoration: none; }
+nav a[aria-current] { font-weight: 650; text-decoration: underline; }
+h1 { font-size: 30px; letter-spacing: -.035em; line-height: 1.12; margin: 19px 0 12px; }
+h2, legend { font-size: 15px; font-weight: 680; margin: 0; }
+p { margin: 0; }
+button, input, select { font: inherit; }
+button, input:not([type=radio]), select { min-height: 35px; border-radius: 6px; color: inherit; background: var(--card, Canvas); border: 1px solid var(--border, #8792a3); padding: 5px 10px; }
+button { cursor: pointer; font-weight: 550; }
+button:hover, nav a:hover { background: var(--secondary, ButtonFace); }
+button:disabled { cursor: default; opacity: .58; }
+button.primary { color: white; background: #2457b5; border-color: #2457b5; }
+button.primary:hover:not(:disabled) { background: #19438e; }
+:where(a,button,input,select):focus-visible { outline: 2px solid var(--ring, #3f83dc); outline-offset: 3px; }
+.workspace { display: grid; gap: 12px; }
+.status { background: var(--secondary, Canvas); padding: 10px 12px; border-block: 1px solid var(--border, #8792a3); }
+.status-top { justify-content: space-between; min-height: 32px; }
+.status-name { display: flex; gap: 8px; align-items: center; font-weight: 680; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #78899c; }
+[data-live=true] .dot { background: #28a572; }
+[data-busy=true] .dot { background: #d19531; }
+.hint, .demo-label, small { color: var(--muted-foreground, GrayText); }
+.status-detail { margin-top: 2px; }
+.status-detail:empty { display: none; }
+.route-panel { min-width: 0; }
+fieldset { border: 0; padding: 0; min-width: 0; margin: 0; }
+legend { padding: 0; margin-bottom: 6px; }
+.routes label { display: grid; grid-template-columns: auto 1fr; align-items: start; gap: 7px; padding: 7px 5px; border-bottom: 1px solid var(--border, #8792a3); cursor: pointer; }
+.routes input { margin: 4px 0 0; accent-color: #376fcd; }
+.route-name { display: block; font-weight: 650; }
+.routes small { display: block; }
+.server-choice { margin-top: 10px; }
+.server-choice label, .editor label { display: grid; gap: 4px; font-weight: 600; }
+.server-choice select { width: 100%; }
+.route-action { margin-top: 12px; }
+#pending-text { margin: 0 0 7px; }
+#pending-text:empty { display: none; }
+.error { color: var(--destructive, #a52831); }
+[data-variant=split] .workspace { grid-template-columns: minmax(0, 3fr) minmax(190px, 2fr); gap: 18px; align-items: start; }
+[data-variant=split] .status { grid-column: 2; grid-row: 1; }
+[data-variant=split] .route-panel { grid-column: 1; grid-row: 1; }
+[data-variant=tiles] .workspace .status { order: 2; }
+[data-variant=tiles] .routes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+[data-variant=tiles] .routes label { border: 1px solid var(--border, #8792a3); border-radius: 6px; }
+[data-variant=tiles] .routes label:has(input:checked) { border-color: #5b8bdc; box-shadow: inset 0 0 0 1px #5b8bdc; }
+.manager-top { justify-content: space-between; margin-bottom: 8px; }
+.server-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; padding: 8px 0; border-bottom: 1px solid var(--border, #8792a3); }
+.server-row small { display: block; overflow-wrap: anywhere; }
+.editor { display: grid; gap: 7px; margin-top: 10px; background: var(--secondary, Canvas); border-left: 3px solid #5b8bdc; padding: 10px; }
+.editor input { width: 100%; }
+.demo { margin-top: 15px; padding: 8px 0; border-top: 1px solid var(--border, #8792a3); font-size: 13px; }
+.demo button { min-height: 28px; padding: 2px 7px; }
+.switcher { display: flex; align-items: center; justify-content: center; gap: 7px; margin: 6px auto 5px; width: max-content; border-radius: 20px; background: #233e64; color: white; padding: 4px 7px; font-size: 13px; }
+.switcher button { min-width: 26px; min-height: 24px; padding: 0 5px; background: transparent; border-color: #8fa4c4; color: white; }
+dialog { max-width: min(420px, calc(100% - 24px)); border: 1px solid var(--border, #8792a3); border-radius: 8px; background: var(--card, Canvas); color: inherit; }
+dialog::backdrop { background: #1721348a; }
+dialog p { margin: 6px 0 12px; }
+@media (max-width: 460px) {
+  [data-variant=split] .workspace { grid-template-columns: 1fr; gap: 10px; }
+  [data-variant=split] .status, [data-variant=split] .route-panel { grid-column: auto; grid-row: auto; }
+  [data-variant=tiles] .routes label { padding-inline: 3px; gap: 2px; }
+  [data-variant=tiles] .routes small { display: none; }
+  .server-row { align-items: start; }
+}
+</style>
+</head>
+<body>
+<main class="shell">
+<header><span class="brand">Playwriter</span><nav aria-label="Settings"><a id="connection-link" href="?page=connection">Connection</a><a id="servers-link" href="?page=servers">Manage Servers</a></nav></header>
+<section id="connection">
+<h1>Connection</h1>
+<div class="workspace">
+  <section class="status" id="status" aria-label="Current connection">
+    <div class="status-top"><p class="status-name"><span class="dot" aria-hidden="true"></span><span role="status" id="connection-state"></span></p><button type="button" id="disconnect">Disconnect</button></div>
+    <p id="connection-detail" class="status-detail hint"></p>
+  </section>
+  <section class="route-panel">
+    <fieldset id="route-fieldset"><legend>Choose a route</legend>
+      <div class="routes">
+        <label><input type="radio" name="route" value="local" checked><span><span class="route-name">Local</span><small>Use the relay on this computer.</small></span></label>
+        <label><input type="radio" name="route" value="hosted"><span><span class="route-name">playwriter.dev</span><small>Share access through playwriter.dev.</small></span></label>
+        <label><input type="radio" name="route" value="tailcat"><span><span class="route-name">Tailcat</span><small>Share through a Tailcat server.</small></span></label>
+      </div>
+      <div class="server-choice" id="server-choice" hidden><label>Tailcat server<select id="server-select"></select></label></div>
+    </fieldset>
+    <div class="route-action"><p id="pending-text" class="hint"></p><button class="primary" type="button" id="connect">Connect</button></div>
+  </section>
+</div>
+</section>
+<section id="servers" hidden>
+<h1>Manage Servers</h1>
+<div class="manager-top"><p class="hint">Manage custom HTTPS DERP maps for Tailcat.</p><button type="button" class="primary" id="add-server">Add server</button></div>
+<div id="server-list"></div>
+<form class="editor" id="editor" hidden>
+  <h2 id="editor-title">Add server</h2>
+  <label>Name<input id="server-name" required></label>
+  <label>HTTPS DERP map URL<input id="server-url" type="url" required placeholder="https://relay.example.invalid/derp-map.json"></label>
+  <p role="status" id="editor-message" hidden></p>
+  <div class="actions"><button type="button" id="validate-server">Validate</button><button type="submit" class="primary" id="save-server">Save server</button><button type="button" id="cancel-edit">Cancel</button></div>
+</form>
+</section>
+<aside class="demo" aria-label="Prototype controls">
+  <span class="demo-label">Prototype controls</span><button type="button" id="toggle-tabs">Simulate zero eligible tabs</button><button type="button" id="fail-connect" aria-pressed="false">Fail next Connect</button><button type="button" id="reset">Reset</button>
+</aside>
+<div class="switcher" aria-label="Prototype layout">
+  <button type="button" id="previous" aria-label="Previous layout">←</button><span id="layout-name"></span><button type="button" id="next" aria-label="Next layout">→</button>
+</div>
+<dialog id="confirm">
+  <h2 id="confirm-title"></h2>
+  <p id="confirm-text"></p>
+  <form method="dialog" class="actions"><button value="cancel" autofocus>Cancel</button><button value="connect" class="primary" id="confirm-action">Connect and share</button></form>
+</dialog>
+</main>
+<script>
+const layouts = [
+  ['stack', 'Status first'],
+  ['split', 'Side-by-side'],
+  ['tiles', 'Route tiles'],
+]
+const defaults = () => [
+  {id: 'public', name: 'Public Tailcat', url: ''},
+  {id: 'demo', name: 'Example server', url: 'https://relay.example.invalid/derp-map.json'},
+]
+const byId = (id) => document.getElementById(id)
+const routeInputs = [...document.querySelectorAll('input[name=route]')]
+const initialParams = new URLSearchParams(location.search)
+const view = { page: initialParams.get('page') === 'servers' ? 'servers' : 'connection',
+  index: Math.max(0, layouts.findIndex(([key]) => key === initialParams.get('variant'))) }
+const confirmation = byId('confirm')
+let servers = defaults()
+let selectedRoute = 'local'
+let selectedServer = 'public'
+let active = null
+let transition = null
+let error = ''
+let editing = null
+let pendingConfirmation = null
+let failConnect = false
+let tabCount = 3
+
+function selectRoute() {
+  if (selectedRoute === 'local') return { key: 'local', name: 'Local' }
+  if (selectedRoute === 'hosted') return { key: 'hosted', name: 'playwriter.dev' }
+  const server = servers.find((server) => server.id === selectedServer)
+  return { key: server.id, name: server.name, url: server.url }
+}
+
+function renderConnection() {
+  const selected = selectRoute()
+  const sameRoute = active?.key === selected.key && active?.name === selected.name && active?.url === selected.url
+  const stateLabel = transition ? transition.label : active ? 'Connected to ' + active.name : 'Disconnected'
+  const pendingLabel = transition ? '' : error || (active && !sameRoute ? 'Connect replaces the current connection.' : '')
+  byId('status').dataset.live = !!active
+  byId('status').dataset.busy = !!transition
+  byId('connection-state').textContent = stateLabel
+  byId('connection-detail').textContent = active && !transition
+    ? tabCount ? tabCount + ' eligible tabs' : 'No eligible tabs'
+    : ''
+  byId('disconnect').hidden = !active
+  byId('disconnect').disabled = !!transition
+  byId('route-fieldset').disabled = !!transition
+  routeInputs.forEach((input) => { input.checked = input.value === selectedRoute })
+  byId('server-choice').hidden = selectedRoute !== 'tailcat'
+  byId('server-select').replaceChildren(...servers.map((server) => new Option(server.name, server.id, false, server.id === selectedServer)))
+  byId('connect').disabled = !!transition || sameRoute
+  const pending = byId('pending-text')
+  pending.textContent = pendingLabel
+  pending.classList.toggle('error', !!error)
+  pending.setAttribute('role', error ? 'alert' : 'status')
+  byId('fail-connect').setAttribute('aria-pressed', failConnect)
+  byId('fail-connect').textContent = failConnect ? 'Next Connect will fail' : 'Fail next Connect'
+  byId('toggle-tabs').textContent = tabCount ? 'Simulate zero eligible tabs' : 'Restore eligible tabs'
+}
+
+function updateView() {
+  const [variant, layoutName] = layouts[view.index]
+  document.body.dataset.variant = variant
+  byId('layout-name').textContent = layoutName
+  for (const page of ['connection', 'servers']) {
+    byId(page).hidden = view.page !== page
+    const link = byId(page + '-link')
+    link.href = '?page=' + page + '&variant=' + variant
+    if (view.page === page) link.setAttribute('aria-current', 'page')
+    else link.removeAttribute('aria-current')
+  }
+  try { history.replaceState(null, '', '?page=' + view.page + '&variant=' + variant) } catch {}
+  renderConnection()
+  renderServers()
+}
+
+function changeLayout(offset) {
+  view.index = (view.index + offset + layouts.length) % layouts.length
+  updateView()
+}
+
+function simulateConnect(route) {
+  if (active) transition = {label: 'Disconnecting from ' + active.name + '…'}
+  else transition = {label: 'Connecting to ' + route.name + '…'}
+  error = ''
+  renderConnection()
+  const currentTransition = transition
+  setTimeout(() => {
+    if (transition !== currentTransition) return
+    active = null
+    transition.label = 'Connecting to ' + route.name + '…'
+    renderConnection()
+    setTimeout(() => {
+      if (transition !== currentTransition) return
+      transition = null
+      if (failConnect) {
+        failConnect = false
+        error = route.key === 'local'
+          ? 'Could not reach the local relay. Start Playwriter on this computer and try again.'
+          : 'Could not connect to ' + route.name + '. Check the server and try again.'
+      } else {
+        active = route
+      }
+      renderConnection()
+    }, 550)
+  }, active ? 350 : 0)
+}
+
+function openConfirmation(action, title, text, label) {
+  pendingConfirmation = action
+  byId('confirm-title').textContent = title
+  byId('confirm-text').textContent = text
+  byId('confirm-action').textContent = label
+  confirmation.returnValue = 'cancel'
+  confirmation.showModal()
+}
+
+function showEditor(server) {
+  editing = server?.id ?? ''
+  byId('editor-title').textContent = server ? 'Edit server' : 'Add server'
+  byId('server-name').value = server?.name ?? ''
+  byId('server-url').value = server?.url ?? ''
+  editorMessage('')
+  byId('editor').hidden = false
+  byId('server-name').focus()
+}
+
+function editorMessage(message, isError = false) {
+  const output = byId('editor-message')
+  output.textContent = message
+  output.hidden = !message
+  output.classList.toggle('error', isError)
+}
+
+function checkMapURL() {
+  const input = byId('server-url')
+  let url
+  try { url = new URL(input.value) } catch {}
+  if (!url || url.protocol !== 'https:' || url.username || url.password || url.hash) {
+    editorMessage('Enter an HTTPS map URL without credentials or a fragment.', true)
+    return null
+  }
+  return url.href
+}
+
+function renderServers() {
+  const list = byId('server-list')
+  list.replaceChildren()
+  for (const server of servers) {
+    const row = document.createElement('div')
+    row.className = 'server-row'
+    const info = document.createElement('div')
+    const name = document.createElement('strong')
+    const detail = document.createElement('small')
+    name.textContent = server.name
+    detail.textContent = server.id === 'public' ? 'Built in' : server.url
+    info.append(name, detail)
+    row.append(info)
+    if (server.id !== 'public') {
+      const actions = document.createElement('div')
+      actions.className = 'actions'
+      const edit = document.createElement('button')
+      edit.textContent = 'Edit'
+      edit.setAttribute('aria-label', 'Edit ' + server.name)
+      edit.onclick = () => showEditor(server)
+      const remove = document.createElement('button')
+      remove.textContent = 'Remove'
+      remove.setAttribute('aria-label', 'Remove ' + server.name)
+      remove.onclick = () => openConfirmation(() => {
+        servers = servers.filter((entry) => entry.id !== server.id)
+        if (selectedServer === server.id) selectedServer = 'public'
+        byId('editor').hidden = true
+        renderServers()
+        renderConnection()
+      }, 'Remove ' + server.name + '?', active?.key === server.id
+        ? 'The current connection stays active until you disconnect or connect to another route.'
+        : 'This server will be removed from your Tailcat choices.', 'Remove server')
+      actions.append(edit, remove)
+      row.append(actions)
+    }
+    list.append(row)
+  }
+}
+
+for (const page of ['connection', 'servers']) byId(page + '-link').onclick = (event) => {
+  event.preventDefault()
+  view.page = page
+  updateView()
+  byId(page).querySelector('h1').setAttribute('tabindex', '-1')
+  byId(page).querySelector('h1').focus()
+}
+byId('previous').onclick = () => changeLayout(-1)
+byId('next').onclick = () => changeLayout(1)
+document.addEventListener('keydown', (event) => {
+  if (confirmation.open || event.target.closest('input,select,textarea,[contenteditable]')) return
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') changeLayout(event.key === 'ArrowLeft' ? -1 : 1)
+})
+routeInputs.forEach((input) => input.onchange = () => { selectedRoute = input.value; error = ''; renderConnection() })
+byId('server-select').onchange = (event) => { selectedServer = event.target.value; error = ''; renderConnection() }
+byId('connect').onclick = () => {
+  const route = selectRoute()
+  if (route.key === 'local') simulateConnect(route)
+  else openConfirmation(() => simulateConnect(route), 'Share through ' + route.name + '?',
+    'Anyone you give the share credentials to can read and control eligible tabs. Disconnect revokes access.',
+    'Connect and share')
+}
+confirmation.onclose = () => {
+  const action = pendingConfirmation
+  pendingConfirmation = null
+  if (confirmation.returnValue === 'connect') action?.()
+}
+byId('disconnect').onclick = () => {
+  const currentTransition = {label: 'Disconnecting from ' + active.name + '…'}
+  transition = currentTransition
+  renderConnection()
+  setTimeout(() => {
+    if (transition !== currentTransition) return
+    active = null
+    transition = null
+    renderConnection()
+  }, 350)
+}
+byId('add-server').onclick = () => showEditor()
+byId('cancel-edit').onclick = () => { byId('editor').hidden = true; byId('add-server').focus() }
+byId('validate-server').onclick = () => {
+  if (checkMapURL()) editorMessage('Sample map validated in this prototype.')
+}
+byId('editor').onsubmit = (event) => {
+  event.preventDefault()
+  const url = checkMapURL()
+  const name = byId('server-name').value.trim()
+  if (!url) return
+  if (!name) { editorMessage('Enter a server name.', true); return }
+  const server = { id: editing || 'server-' + Date.now(), name, url }
+  servers = editing ? servers.map((entry) => entry.id === editing ? server : entry) : [...servers, server]
+  byId('editor').hidden = true
+  renderServers()
+  renderConnection()
+  byId('add-server').focus()
+}
+byId('toggle-tabs').onclick = () => { tabCount = tabCount ? 0 : 3; renderConnection() }
+byId('fail-connect').onclick = () => { failConnect = !failConnect; renderConnection() }
+byId('reset').onclick = () => {
+  servers = defaults()
+  selectedRoute = 'local'
+  selectedServer = 'public'
+  active = null
+  transition = null
+  error = ''
+  failConnect = false
+  tabCount = 3
+  byId('editor').hidden = true
+  view.page = 'connection'
+  updateView()
+}
+updateView()
+</script>
+</body>
+</html>

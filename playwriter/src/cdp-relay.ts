@@ -1695,6 +1695,7 @@ export async function startPlayWriterCDPRelayServer({
         ? getExtensionConnection(requestedExtensionId)
         : getExtensionConnection(null, { allowFallback: true })
       const clientExtensionId = resolvedExtension?.id || null
+      const pendingFrameTreeResponses = new Map<string, Promise<void>>()
 
       const getBoundExtensionIdForClient = (): string | null => {
         const client = store.getState().playwrightClients.get(clientId)
@@ -1784,7 +1785,25 @@ export async function startPlayWriterCDPRelayServer({
             return
           }
 
+          let frameTreeSent: (() => void) | undefined
+          if (sessionId && method === 'Page.getFrameTree' && !pendingFrameTreeResponses.has(sessionId)) {
+            let complete = () => {}
+            const responseSent = new Promise<void>((resolve) => {
+              complete = resolve
+            })
+            pendingFrameTreeResponses.set(sessionId, responseSent)
+            frameTreeSent = complete
+          }
           try {
+            // Chromium can replay existing load events immediately when this is
+            // enabled. Playwright installs its listener after reading the frame tree.
+            if (sessionId && method === 'Page.setLifecycleEventsEnabled' && params?.enabled === true) {
+              const pendingFrameTree = pendingFrameTreeResponses.get(sessionId)
+              if (pendingFrameTree) {
+                await pendingFrameTree
+                if (getBoundExtensionIdForClient() !== extensionConn.id) throw new Error('Extension connection changed')
+              }
+            }
             const result = await routeCdpCommand({
               extensionId: extensionConn.id,
               method,
@@ -1947,6 +1966,11 @@ export async function startPlayWriterCDPRelayServer({
             }
             sendToPlaywright({ message: errorResponse, clientId })
             emitter.emit('cdp:response', { clientId, response: errorResponse, command: message })
+          } finally {
+            if (sessionId && frameTreeSent) {
+              pendingFrameTreeResponses.delete(sessionId)
+              frameTreeSent()
+            }
           }
         },
 

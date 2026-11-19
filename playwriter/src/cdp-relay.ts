@@ -14,6 +14,7 @@ import type {
 } from './protocol.js'
 import {
   DEFAULT_TAB_GROUP_TITLE,
+  INVENTORY_READY_CAPABILITY,
   REMOTE_TAB_GROUP_TITLE,
   normalizeTabGroupColor,
   normalizeTabGroupTitle,
@@ -2669,6 +2670,7 @@ export async function startPlayWriterCDPRelayServer({
     const handlers = createExtensionSocketHandlers({
       connectionId,
       initialInfo: { browser: 'Remote browser' },
+      initialCapabilities: [INVENTORY_READY_CAPABILITY],
       stableKeyOverride: dial.stableKey,
     })
     logger?.log(pc.blue('Dialing remote extension'))
@@ -2761,11 +2763,12 @@ export async function startPlayWriterCDPRelayServer({
     dial.sessionIds.add(sessionId)
     sessionRemoteUrlKeys.set(sessionId, urlKey)
 
-    // Wait for the tunnel roundtrip: dial → traforo → extension hello + Target.attachedToTarget.
+    // A browser-wide grant can send ready with zero tabs. Legacy shares announce
+    // an anchor and do not send ready.
     const deadline = Date.now() + 15000
     while (Date.now() < deadline) {
       const entry = relayState.findExtensionByStableKey(store.getState(), stableKey)
-      if (entry?.ws && entry.connectedTargets.size > 0) {
+      if (entry?.ws && (entry.inventoryReady || entry.connectedTargets.size > 0)) {
         return entry
       }
       await new Promise((resolve) => setTimeout(resolve, 200))

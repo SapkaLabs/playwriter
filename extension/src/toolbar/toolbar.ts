@@ -14,7 +14,7 @@ declare global {
     __playwriterToolbarSetRecording?: (recording: boolean) => void
     __playwriterToolbarStopRecording?: (() => void) | null
     __playwriterToolbarStartRecording?: (() => void) | null
-    __playwriterToolbarSetRemote?: (active: boolean, tailcat?: boolean) => void
+    __playwriterToolbarSetRemote?: (active: boolean, tailcat?: boolean, browserWide?: boolean) => void
     __playwriterToolbarStartRemote?: (() => void) | null
     __playwriterToolbarStopRemote?: (() => void) | null
     __playwriterToolbarShowToast?: (msg: string) => void
@@ -278,6 +278,9 @@ export function initPlaywriterToolbar(): void {
     }
     .remote-panel button:hover {
       background: rgba(255,255,255,0.08);
+    }
+    .remote-panel button[hidden] {
+      display: none;
     }
     .remote-panel button svg {
       flex-shrink: 0;
@@ -1130,8 +1133,9 @@ export function initPlaywriterToolbar(): void {
   }
   updateRemoteBtn()
 
-  function setRemote(active: boolean, tailcat = false): void {
-    copyPromptItem.hidden = tailcat
+  function setRemote(active: boolean, tailcat = false, browserWide = false): void {
+    copyPromptItem.hidden = tailcat || browserWide
+    copyIdItem.hidden = browserWide
     copyIdItem.innerHTML = HASH_SVG + (tailcat ? ' <span>Copy connection information</span>' : ' <span>Copy id</span>')
     remoteActive = active
     hideRemotePanels()

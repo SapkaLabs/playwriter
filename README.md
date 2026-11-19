@@ -321,6 +321,8 @@ Color-coded: yellow=links, orange=buttons, coral=inputs, pink=checkboxes, peach=
 
 Let a remote agent (Devin, a cloud bot, a friend's CLI agent) drive **your own browser**. No playwriter install needed on your machine, only the extension. The agent sees every Playwriter tab and can open new ones, like a local agent.
 
+To share all eligible tabs across regular windows, open the extension's **Connection** settings, choose **playwriter.dev**, and confirm **Connect**. Use **Copy CLI command** to give a trusted agent access. Sharing continues when you close tabs, even with zero eligible tabs. **Disconnect** or closing the browser revokes the command.
+
 1. Click the light-blue **Remote control** cloud button and confirm that the agent may read and control your browser
 2. A prompt containing a secret tunnel URL is copied to your clipboard — paste it to the agent
 3. The agent runs `playwriter session new --remote <id>` on its machine
@@ -338,7 +340,7 @@ YOUR MACHINE (extension only)                        AGENT MACHINE (any box with
 
 Remote control is **not a sandbox**. The agent gets the same access as a local Playwriter agent, so share the id only with a person or agent you fully trust. A short denylist blocks only whole-profile cookie APIs and cache clears, so an agent cannot wipe every login by accident. The id contains 128 bits of randomness and is never reusable after revocation.
 
-Sharing also ends when you close or disconnect the tab where you started it.
+Toolbar sharing also ends when you close or disconnect the tab where you started it.
 
 Use case: you are logged into a website and want an agent to do work in your authenticated session without giving it your password.
 

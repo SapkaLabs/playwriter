@@ -160,6 +160,24 @@ button:disabled {
 #connect:hover:not(:disabled) {
   background: #19438e;
 }
+dialog {
+  max-width: 410px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: CanvasText;
+  background: Canvas;
+}
+dialog h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+dialog form {
+  margin-top: 16px;
+  text-align: right;
+}
+#copy-command {
+  margin-top: 8px;
+}
 :where(a, button, input, select):focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 3px;

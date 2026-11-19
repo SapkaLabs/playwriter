@@ -24,6 +24,8 @@
           <button id="disconnect" type="button" hidden>Disconnect</button>
         </div>
         <p id="detail" class="muted"></p>
+        <button id="copy-command" type="button" hidden>Copy CLI command</button>
+        <p id="copy-state" role="status"></p>
       </section>
       <fieldset disabled>
         <legend>Choose a route</legend>
@@ -40,7 +42,9 @@
           <input type="radio" name="route" value="hosted" aria-labelledby="hosted" aria-describedby="hosted-detail" />
           <span
             ><strong id="hosted">playwriter.dev</strong
-            ><small id="hosted-detail">Sharing in Connection settings is coming later.</small></span
+            ><small id="hosted-detail"
+              >Share eligible tabs in this Chrome profile with a remote Playwriter CLI.</small
+            ></span
           >
         </label>
         <label class="route">
@@ -64,6 +68,17 @@
       <p id="pending" class="muted" role="status"></p>
       <p id="error" role="alert"></p>
       <button id="connect" type="button" disabled>Connect</button>
+      <dialog aria-labelledby="share-title" aria-describedby="share-description">
+        <h2 id="share-title">Share browser through playwriter.dev</h2>
+        <p id="share-description">
+          Anyone with the private CLI command can control eligible tabs in this Chrome profile and open new tabs.
+          Sharing continues until you disconnect or close the browser.
+        </p>
+        <form method="dialog">
+          <button value="cancel" autofocus>Cancel</button>
+          <button value="share">Share browser</button>
+        </form>
+      </dialog>
     </main>
     <script type="module" src="./connection-settings-page.ts"></script>
   </body>

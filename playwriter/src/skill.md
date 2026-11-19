@@ -135,9 +135,9 @@ playwriter -s 1 -e "state.page = await context.newPage(); await state.page.goto(
 
 ### Remote control (drive another user's browser)
 
-When a user shares their browser with you, they send a secret **id** (created by the toolbar **Remote control** button). The user needs no playwriter install, only the extension.
+The user shares a secret **id** from the toolbar **Remote control** button or copies a private CLI command from **Connection → playwriter.dev** after confirming **Connect**. They only need the extension.
 
-**How it works:** the extension opens a secret tunnel. Your CLI dials it with the id and talks CDP as if the browser were local. You see every tab where the user enabled Playwriter and can open new tabs with `context.newPage()` (older extensions reject new tabs; then stay in the shared tab). `context.pages()[0]` is the tab where the user started sharing.
+The toolbar share lists attached tabs, starting with the tab where sharing began. A settings share includes all eligible tabs and can start with zero. Use `context.newPage()` to open a tab (older extensions may reject new tabs).
 
 Connect with:
 
@@ -152,7 +152,7 @@ Tabs you open join the `--tab-group` group (default `remote`). Always pass a sho
 Rules for remote-control sessions:
 
 - Other tabs may belong to the user or their local agents. Prefer your own pages: `state.page = context.pages()[0]` for the shared tab, or `await context.newPage()` for new work.
-- The user revokes access anytime with **Stop sharing**, or by closing the tab where sharing started; the id then stops working permanently. If the connection dies, ask the user for a fresh id.
+- **Disconnect** ends a settings share. **Stop sharing** or closing the starting tab ends a toolbar share. Closing the browser revokes either id.
 - Never print, log, or share the id: whoever has it can control the user's browser as them.
 
 **Use cases:** the user is logged into a website and wants you (a remote agent like Devin, a cloud bot, or a CLI agent on another machine) to act in their authenticated session without sharing passwords.

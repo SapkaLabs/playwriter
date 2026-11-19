@@ -1,4 +1,10 @@
-import { isRoute, type ConnectionReply, type ConnectionRequest, type LocalConnection } from './connection-settings'
+import {
+  isRoute,
+  type ConnectionReply,
+  type ConnectionRequest,
+  type LocalConnection,
+  type Route,
+} from './connection-settings'
 
 function element<T extends Element>(selector: string, type: { new (): T }): T {
   const match = document.querySelector(selector)
@@ -16,7 +22,11 @@ const pending = element('#pending', HTMLElement)
 const error = element('#error', HTMLElement)
 const connect = element('#connect', HTMLButtonElement)
 const disconnect = element('#disconnect', HTMLButtonElement)
+const copyCommand = element('#copy-command', HTMLButtonElement)
+const copyState = element('#copy-state', HTMLElement)
+const confirmation = element('dialog', HTMLDialogElement)
 const routeInputs = Array.from(routes.querySelectorAll('input'))
+const routeNames = { local: 'Local', hosted: 'playwriter.dev', tailcat: 'Tailcat' } satisfies Record<Route, string>
 
 const labels = {
   disconnected: 'Disconnected',
@@ -26,6 +36,8 @@ const labels = {
   disconnecting: 'Disconnecting from Local…',
 } satisfies Record<LocalConnection['kind'], string>
 let serverOptionsKey = ''
+let selectedRoute: Route = 'local'
+let activeRoute: Route = 'local'
 
 function setText(element: HTMLElement, text: string): void {
   if (element.textContent !== text) element.textContent = text
@@ -34,20 +46,32 @@ function setText(element: HTMLElement, text: string): void {
 function render(reply: Extract<ConnectionReply, { kind: 'status' }>): void {
   const { connection, preferences } = reply
   const { route, tailcatServerId } = preferences.pending
-  const busy = connection.kind === 'connecting' || connection.kind === 'disconnecting'
-  status.dataset.state =
-    connection.kind === 'remote' ? (connection.online ? 'connected' : 'connecting') : connection.kind
-  if (connection.kind === 'remote') {
-    const name = connection.route === 'hosted' ? 'playwriter.dev' : 'Tailcat'
-    setText(state, connection.online ? `Connected to ${name}` : `Connecting to ${name}…`)
+  selectedRoute = route
+  activeRoute = 'route' in connection ? connection.route : 'local'
+  const busy =
+    connection.kind === 'transition' || connection.kind === 'connecting' || connection.kind === 'disconnecting'
+  const browserScope = 'scope' in connection && connection.scope === 'browser'
+  if (connection.kind === 'transition') {
+    showProgress(connection.phase, connection.route)
+  } else if (connection.kind === 'remote') {
+    status.dataset.state = connection.online
+      ? 'connected'
+      : connection.scope === 'browser'
+        ? 'reconnecting'
+        : 'connecting'
+    const name = routeNames[connection.route]
+    const action = connection.online ? 'Connected' : connection.scope === 'browser' ? 'Reconnecting' : 'Connecting'
+    setText(state, `${action} to ${name}${connection.online ? '' : '…'}`)
   } else if (connection.kind === 'connected' && connection.scope === 'tab') {
+    status.dataset.state = connection.kind
     setText(state, 'Connected to Local (per tab)')
   } else {
+    status.dataset.state = connection.kind
     setText(state, labels[connection.kind])
   }
   setText(
     detail,
-    connection.kind === 'connected'
+    'tabs' in connection
       ? connection.tabs
         ? `${connection.tabs} attached ${connection.tabs === 1 ? 'tab' : 'tabs'}`
         : 'No eligible tabs'
@@ -55,17 +79,19 @@ function render(reply: Extract<ConnectionReply, { kind: 'status' }>): void {
   )
   setText(
     pending,
-    route !== 'local'
+    route === 'tailcat'
       ? 'The selected route is unavailable in Connection settings.'
-      : connection.kind === 'remote'
+      : connection.kind !== 'disconnected' && activeRoute !== route
         ? 'Connect replaces the current connection.'
         : '',
   )
   setText(error, reply.error)
   disconnect.hidden = connection.kind === 'disconnected' || connection.kind === 'connecting'
   disconnect.disabled = busy
+  copyCommand.hidden = connection.kind !== 'remote' || !browserScope || !connection.online
+  if (copyCommand.hidden) setText(copyState, '')
   routes.disabled = busy
-  connect.disabled = busy || route !== 'local' || (connection.kind === 'connected' && connection.scope === 'browser')
+  connect.disabled = busy || route === 'tailcat' || (browserScope && activeRoute === route)
   for (const input of routeInputs) input.checked = input.value === route
   serverChoice.hidden = route !== 'tailcat'
   const optionsKey = JSON.stringify(preferences.servers)
@@ -74,6 +100,11 @@ function render(reply: Extract<ConnectionReply, { kind: 'status' }>): void {
     serverOptionsKey = optionsKey
   }
   server.value = tailcatServerId ?? ''
+}
+
+function showProgress(phase: 'connecting' | 'disconnecting', route: Route): void {
+  status.dataset.state = phase
+  setText(state, `${phase === 'connecting' ? 'Connecting to' : 'Disconnecting from'} ${routeNames[route]}…`)
 }
 
 let changePending = false
@@ -85,7 +116,7 @@ async function request(request: ConnectionRequest): Promise<void> {
     const reply: ConnectionReply = await chrome.runtime.sendMessage({ action: 'connectionSettings', request })
     if (current !== revision) return
     if (reply.kind === 'error') setText(error, reply.message)
-    else render(reply)
+    else if (reply.kind === 'status') render(reply)
   } catch {
     if (current === revision) setText(error, 'Could not load Connection settings. Try again.')
   }
@@ -99,9 +130,12 @@ async function change(action: Exclude<ConnectionRequest, { kind: 'status' }>): P
     routes.disabled = true
     disconnect.disabled = true
     if (action.kind === 'connect' || action.kind === 'disconnect') {
-      const progress = action.kind === 'connect' ? 'connecting' : 'disconnecting'
-      status.dataset.state = progress
-      setText(state, labels[progress])
+      showProgress(
+        action.kind === 'connect' ? 'connecting' : 'disconnecting',
+        action.kind === 'connect' ? selectedRoute : activeRoute,
+      )
+      copyCommand.hidden = true
+      setText(copyState, '')
       setText(detail, '')
       setText(error, '')
     }
@@ -117,8 +151,32 @@ for (const input of routeInputs) {
   }
 }
 server.onchange = () => void change({ kind: 'select-server', id: server.value || null })
-connect.onclick = () => void change({ kind: 'connect' })
+connect.onclick = () => {
+  if (selectedRoute === 'hosted') {
+    confirmation.returnValue = ''
+    confirmation.showModal()
+  } else {
+    void change({ kind: 'connect' })
+  }
+}
+confirmation.onclose = () => {
+  if (confirmation.returnValue === 'share') void change({ kind: 'connect', confirmedRoute: 'hosted' })
+}
 disconnect.onclick = () => void change({ kind: 'disconnect' })
+copyCommand.onclick = async () => {
+  if (changePending) return
+  try {
+    const reply: ConnectionReply = await chrome.runtime.sendMessage({
+      action: 'connectionSettings',
+      request: { kind: 'copy-command' } satisfies ConnectionRequest,
+    })
+    if (reply.kind !== 'command') throw new Error('Command unavailable')
+    await navigator.clipboard.writeText(reply.command)
+    setText(copyState, 'Copied command')
+  } catch {
+    setText(copyState, 'Could not copy the command.')
+  }
+}
 
 void request({ kind: 'status' })
 setInterval(() => {

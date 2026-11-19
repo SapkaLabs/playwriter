@@ -15,8 +15,9 @@ export type ConnectionRequest =
   | { kind: 'status' }
   | { kind: 'select'; route: Route }
   | { kind: 'select-server'; id: string | null }
-  | { kind: 'connect' }
+  | { kind: 'connect'; confirmedRoute?: 'hosted' }
   | { kind: 'disconnect' }
+  | { kind: 'copy-command' }
 
 export type LocalConnection =
   | { kind: 'disconnected' }
@@ -25,7 +26,11 @@ export type LocalConnection =
   | { kind: 'reconnecting' }
   | { kind: 'disconnecting' }
 
-export type ActiveConnection = LocalConnection | { kind: 'remote'; route: 'hosted' | 'tailcat'; online: boolean }
+export type ActiveConnection =
+  | LocalConnection
+  | { kind: 'transition'; route: Route; phase: 'connecting' | 'disconnecting' }
+  | { kind: 'remote'; route: 'hosted' | 'tailcat'; scope: 'tab'; online: boolean }
+  | { kind: 'remote'; route: 'hosted'; scope: 'browser'; online: boolean; tabs: number }
 
 type PendingSelection = { route: Route; tailcatServerId: string | null }
 
@@ -36,15 +41,20 @@ type Preferences = {
 
 export type ConnectionReply =
   | { kind: 'status'; preferences: Preferences; connection: ActiveConnection; error: string }
+  | { kind: 'command'; command: string }
   | { kind: 'error'; message: string }
 
 export function parseConnectionRequest(value: unknown): ConnectionRequest | undefined {
   if (!value || typeof value !== 'object' || !('kind' in value)) return
   switch (value.kind) {
     case 'status':
-    case 'connect':
     case 'disconnect':
+    case 'copy-command':
       return { kind: value.kind }
+    case 'connect':
+      return 'confirmedRoute' in value && value.confirmedRoute === 'hosted'
+        ? { kind: 'connect', confirmedRoute: 'hosted' }
+        : { kind: 'connect' }
     case 'select':
       if ('route' in value && isRoute(value.route)) return { kind: 'select', route: value.route }
       break

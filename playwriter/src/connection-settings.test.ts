@@ -654,7 +654,8 @@ test('Connect Local follows eligibility without exposing restricted targets or a
         await page.waitForLoadState("domcontentloaded");
         console.log(await page.title());
       `)
-      expect(opened.stdout.trim().endsWith('[log] Popup fixture')).toBe(true)
+      expect(opened.ok, opened.stderr).toBe(true)
+      expect(opened.stdout.trim()).toMatch(/\[log\] Popup fixture$/)
       expect(
         (await owner(titleList)).stdout.trim().endsWith('[log] Owned fixture, Popup fixture, Shared fixture'),
       ).toBe(true)

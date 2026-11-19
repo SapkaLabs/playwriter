@@ -7,7 +7,21 @@ Implementation: [browser #13](https://github.com/SapkaLabs/playwriter/issues/13)
 [verification #17](https://github.com/SapkaLabs/playwriter/issues/17).
 This is a developer feature; no package or store publication is implied.
 
-## Browser
+## Browser-wide sharing
+
+Open the extension's **Connection** settings and follow **Manage Servers** to
+add a name and HTTPS DERP map URL. **Validate** checks the saved map and reports
+how many regions it contains. Choose **Tailcat** in Connection, select the
+custom server, then click **Connect** and confirm **Share browser**. Copy the
+connection information into a private descriptor file for the controller.
+
+Public Tailcat is built in. Editing or removing a custom server leaves any
+active share on its original map. Removing the pending server selects Public
+Tailcat for the next connection. **Connect** revokes the previous grant before
+attempting the confirmed selection. If that attempt fails, the browser stays
+disconnected and keeps the attempted server selected.
+
+## Current-tab sharing
 
 Open **Share browser** from the extension menu. Select a saved server and a tab,
 then **Start sharing**. **Manage servers** adds, renames, edits, removes, or

@@ -32,7 +32,6 @@ import {
 import { handleGhostBrowserCommand, type GhostBrowserCommandParams } from 'playwriter/src/ghost-browser'
 import { RemoteTunnel, type RemoteTunnelOptions, type TunnelStatus } from './remote-tunnel'
 import { TailcatTunnel } from './tailcat-tunnel/index'
-import { PUBLIC_DERP_MAP } from 'playwriter/src/tailcat-tunnel/protocol'
 import {
   ProfileStore,
   findProfile,
@@ -75,15 +74,24 @@ import bippyBundleCode from '../../playwriter/dist/bippy.js?raw'
 import type { OffscreenCopyTextResult, OffscreenPlaySoundResult, SoundName } from './offscreen-types'
 import {
   CONNECTION_SETTINGS_PAGE,
-  TAILCAT_PROFILES_KEY,
+  MANAGE_SERVERS_PAGE,
   getConnectionPreferences,
+  manageServer,
   parseConnectionRequest,
+  parseServerRequest,
+  routeName,
+  sameServer,
+  serverChoice,
+  serverName,
+  tailcatProfiles,
   type ActiveConnection,
   type ConnectionReply,
   type ConnectionRequest,
   type LocalConnection,
   type RemoteRoute,
   type Route,
+  type ServerReply,
+  type ServerSnapshot,
 } from './connection-settings'
 
 function isTruthy<T>(value: T): value is NonNullable<T> {
@@ -334,18 +342,21 @@ type RemoteTunnelScope =
   | { kind: 'tab'; anchorTabId: number; remoteTabIds: Set<number> }
   | { kind: 'browser'; enrollment: BrowserEnrollment<RemoteRoute> }
 
+type TailcatOrigin =
+  | { source: 'legacy'; profileId: string; derpMapURL: string }
+  | { source: 'settings'; server: ServerSnapshot }
+
 type RemoteTunnelRuntime = { tunnelId: string; scope: RemoteTunnelScope } & (
   | { route: 'hosted'; tunnel: RemoteTunnel; status: TunnelStatus }
-  | {
+  | (TailcatOrigin & {
       route: 'tailcat'
       tunnel: TailcatTunnel
       status: 'starting' | 'ready' | 'connected' | 'disconnected'
-      profileId?: string
-    }
+    })
 )
 let remoteTunnel: RemoteTunnelRuntime | null = null
 let remoteCleanup: Promise<unknown> | undefined
-let settingsTransition: { kind: 'connecting' | 'disconnecting'; route: Route } | undefined
+let settingsTransition: { kind: 'connecting' | 'disconnecting'; name: string } | undefined
 let tailcatLogScopes = 0
 
 // Keep inherited diagnostics from serializing browser data during a public
@@ -359,12 +370,6 @@ async function withoutTailcatLogs<T>(operation: () => Promise<T>): Promise<T> {
   }
 }
 let tailcatFailure: string | null = null
-const tailcatProfiles = new ProfileStore({
-  read: async () => (await chrome.storage.local.get(TAILCAT_PROFILES_KEY))[TAILCAT_PROFILES_KEY],
-  write: async (value) => {
-    await chrome.storage.local.set({ [TAILCAT_PROFILES_KEY]: value })
-  },
-})
 let tailcatEpoch = 0
 let tailcatStarting = false
 let tailcatChanging = false
@@ -399,7 +404,7 @@ async function changeTailcatProfile(change: ProfileMutation, stopActive: boolean
 }
 
 function getLegacyTailcat() {
-  return remoteTunnel?.route === 'tailcat' && remoteTunnel.scope.kind === 'tab' ? remoteTunnel : undefined
+  return remoteTunnel?.route === 'tailcat' && remoteTunnel.source === 'legacy' ? remoteTunnel : undefined
 }
 
 /**
@@ -449,6 +454,13 @@ function waitForSocketClose(socket: WebSocket | null): Promise<void> {
     socket.addEventListener('close', () => resolve(), { once: true })
   })
 }
+
+async function waitForRouteCleanup(cleanup: Promise<unknown> | undefined): Promise<void> {
+  if (!cleanup) return
+  const completed = await withTimeout(cleanup.then(() => true, () => false), 10_000, false)
+  if (!completed) throw new ConfigurationError('ROUTE_CLEANUP_FAILED', 'Previous connection cleanup is incomplete')
+}
+
 const ownedTabGroups = new Map<number, TabGroup>()
 
 function restoreOwnedTabGroups(value: unknown): void {
@@ -485,6 +497,7 @@ class ConnectionManager {
   ws: WebSocket | null = null
   private pendingSocket: WebSocket | null = null
   private connectionPromise: Promise<void> | null = null
+  private cleanup: Promise<unknown> | undefined
   // Monotonic id bumped on every connect(). The global timeout in ensureConnection()
   // does NOT cancel a losing connect(), so a stale socket's late onopen could otherwise
   // clobber `this.ws` of a newer attempt. Every socket callback checks this id and goes
@@ -532,7 +545,7 @@ class ConnectionManager {
 
   async allowFromTab(): Promise<boolean> {
     await this.accessReady
-    if (this.transition || settingsTransition || isRemoteEnrollment(browserEnrollment)) return false
+    if (this.transition || this.cleanup || settingsTransition || isRemoteEnrollment(browserEnrollment)) return false
     if (!this.legacyAccess) {
       const revocation = this.revocation
       await chrome.storage.session.set({ [LOCAL_ACCESS_KEY]: true })
@@ -547,6 +560,7 @@ class ConnectionManager {
     if (this.transition || browserEnrollment) return
     this.transition = 'connecting'
     try {
+      await waitForRouteCleanup(this.cleanup)
       browserEnrollment = { route: 'local', tabs: new Map() }
       if (store.getState().connectionState === 'extension-replaced') {
         store.setState({ connectionState: 'idle', errorText: undefined })
@@ -570,6 +584,7 @@ class ConnectionManager {
     if (browserOnly && browserEnrollment?.route !== 'local') return
     this.transition = 'disconnecting'
     try {
+      await waitForRouteCleanup(this.cleanup)
       await this.revokeAccess(all ? 'all' : browserEnrollment?.route === 'local' ? 'browser' : 'tab')
     } finally {
       this.transition = undefined
@@ -607,7 +622,19 @@ class ConnectionManager {
             ...inFlightTabAttaches.values(),
           ])
         : Promise.resolve([])
-    await Promise.all([persisted, scope === 'all' ? detach : withTimeout(detach, 3000, []), socketClosed])
+    if (scope !== 'all') {
+      await Promise.all([persisted, withTimeout(detach, 3000, [])])
+      return
+    }
+    const cleanup = Promise.all([persisted, detach, socketClosed])
+    this.cleanup = cleanup
+    void cleanup.then(
+      () => {
+        if (this.cleanup === cleanup) this.cleanup = undefined
+      },
+      () => {},
+    )
+    await waitForRouteCleanup(cleanup)
   }
 
   async ensureConnection(): Promise<void> {
@@ -1286,11 +1313,13 @@ async function dispatchRelayMessage(message: any, sink: RelayMessageSink): Promi
               if (!changedTitle && !changedColor) {
                 continue
               }
-              newTabs.set(tabId, {
+              const updated = {
                 ...info,
                 groupTitle: isRename ? to : info.groupTitle,
                 groupColor: color ?? info.groupColor,
-              })
+              }
+              rememberTabGroup(tabId, updated)
+              newTabs.set(tabId, updated)
               movedTabs++
             }
             return { tabs: newTabs }
@@ -1746,7 +1775,12 @@ async function handleCommand(
     if (navigationError) {
       throw new Error(navigationError)
     }
-    if (browserEnrollment && !isBrowserTabUrl(url, 'created')) {
+    if (browserEnrollment) await fileAccessReady
+    const browserManaged =
+      browserEnrollment &&
+      (msg.params.method === 'Target.createTarget' ||
+        browserEnrollment.tabs.has(getTabForCommand(msg)?.tabId ?? -1))
+    if (browserManaged && !isBrowserTabUrl(url, 'created')) {
       throw new Error('Playwriter clients cannot open restricted browser pages.')
     }
   }
@@ -2337,8 +2371,20 @@ async function attachTabDebugger(
     )) as Protocol.Target.GetTargetInfoResponse
 
     const targetInfo = result.targetInfo
-    if (origin && !isBrowserTabUrl(targetInfo.url, origin)) throw new Error('Cannot attach to this browser page')
     assertTabActive()
+    if (origin) {
+      // Chromium can omit tabs.Tab.openerTabId. Resolve the CDP opener before
+      // publishing the target to the relay, even if the navigation event is late.
+      const opener = targetInfo.openerId ? getTabByTargetId(targetInfo.openerId)?.tab : undefined
+      const inherited = ownedTabGroups.get(tabId) ?? opener
+      if (inherited?.groupKey && !store.getState().tabs.get(tabId)?.groupKey) {
+        setTabConnecting(tabId, inherited)
+        enrollment?.tabs.set(tabId, 'created')
+      }
+      if (!isBrowserTabUrl(targetInfo.url, enrollment?.tabs.get(tabId) ?? origin)) {
+        throw new Error('Cannot attach to this browser page')
+      }
+    }
 
     // Log error if URL is empty - this causes Playwright to create broken pages
     if (!targetInfo.url || targetInfo.url === '' || targetInfo.url === ':') {
@@ -2953,7 +2999,7 @@ async function sendRemoteHelloAndTargets(conn: { send(message: any): void }, sco
 
 type RemoteStartOptions =
   | { route: 'hosted'; tunnelId?: string; remoteTabIds?: number[] }
-  | { route: 'tailcat'; derpMapURL: string; profileId?: string; deadline?: number }
+  | (TailcatOrigin & { route: 'tailcat'; deadline?: number })
 
 async function startRemoteControl(
   anchorTabId: number,
@@ -2975,11 +3021,13 @@ async function startRemoteControl(
   }
   // A legacy share uses the attached-tab inventory. Revoke settings-only
   // access before starting it so a current-tab share cannot inherit that grant.
+  const epoch = tailcatEpoch
   if (browserEnrollment) {
     await connectionManager.disconnectFromSettings({ browserOnly: true })
     if (browserEnrollment || connectionManager.changingLocalAccess) throw new Error('Sharing transition in progress')
   }
-  await remoteCleanup
+  await waitForRouteCleanup(remoteCleanup)
+  if (epoch !== tailcatEpoch) throw new ConfigurationError('SHARE_REVOKED', 'Sharing was stopped')
   if (settingsTransition || remoteTunnel) throw new Error('Sharing transition in progress')
   return startRemoteTunnel({ kind: 'tab', anchorTabId, remoteTabIds: new Set() }, options)
 }
@@ -2997,6 +3045,7 @@ async function startRemoteTunnel(
   const online = new Promise<boolean>((resolve) => {
     settleStartup = resolve
   })
+  let startupFailure: string | undefined
   const tunnelOptions: RemoteTunnelOptions = {
     tunnelId,
     baseDomain: REMOTE_TUNNEL_BASE_DOMAIN,
@@ -3062,26 +3111,25 @@ async function startRemoteTunnel(
   const runtime: RemoteTunnelRuntime =
     options.route === 'tailcat'
       ? {
-          route: options.route,
+          ...options,
           tunnel: new TailcatTunnel({
             ...tunnelOptions,
-            derpMapURL: options.derpMapURL,
+            derpMapURL: options.source === 'settings' ? options.server.derpMapURL : options.derpMapURL,
             deadline: options.deadline,
             keepAlive: scope.kind === 'browser',
             ensureOffscreen: ensureOffscreenDocument,
             onFatal: (reason) => {
               if (remoteTunnel !== runtime) return
+              startupFailure = reason
               stopRemoteControl()
               settleStartup(false)
               if (scope.kind === 'tab') tailcatFailure = reason
-              else if (!settingsTransition)
-                connectionSettingsError = 'Public Tailcat disconnected. Connect again to share.'
+              else if (!settingsTransition) connectionSettingsError = 'Tailcat disconnected. Connect again to share.'
             },
           }),
           tunnelId,
           scope,
           status: 'starting',
-          profileId: options.profileId,
         }
       : { route: options.route, tunnel: new RemoteTunnel(tunnelOptions), tunnelId, scope, status: 'connecting' }
   const { tunnel } = runtime
@@ -3105,7 +3153,15 @@ async function startRemoteTunnel(
               ),
             ])
           : await withTimeout(online, 10_000, false)
-      if (!ready) throw new Error('Remote tunnel startup failed')
+      if (!ready) {
+        if (runtime.route === 'tailcat') {
+          throw new ConfigurationError(
+            'TAILCAT_START_FAILED',
+            startupFailure ?? 'Selected relay is unavailable. Try again.',
+          )
+        }
+        throw new Error('Remote tunnel startup failed')
+      }
     }
     if (remoteTunnel !== runtime) throw new Error(REMOTE_CONTROL_STOPPED_ERROR)
     await persistRemoteTunnel()
@@ -3354,12 +3410,28 @@ function isRestrictedUrl(url: string | undefined): boolean {
   return restrictedPrefixes.some((prefix) => url.startsWith(prefix))
 }
 
+let allowFileTabs = false
+const fileAccessReady = chrome.extension
+  .isAllowedFileSchemeAccess()
+  .then((allowed) => {
+    allowFileTabs = allowed
+  })
+  .catch(() => {})
+
 function isBrowserTabUrl(url: string | undefined, origin: BrowserTabOrigin): boolean {
   // Chrome can withhold the URL entirely under the production permissions.
   // Accept a blank bootstrap page only when Playwriter knows who opened it.
   if (url === 'about:blank') return origin === 'created'
   if (!url || !URL.canParse(url)) return false
-  const { protocol, hostname } = new URL(url)
+  let parsed = new URL(url)
+  if (parsed.protocol === 'blob:') {
+    if (parsed.pathname.startsWith('null/')) return true
+    if (!URL.canParse(parsed.pathname)) return false
+    parsed = new URL(parsed.pathname)
+  }
+  const { protocol, hostname } = parsed
+  if (protocol === 'file:') return allowFileTabs
+  if (protocol === 'data:') return true
   const host = hostname.replace(/\.$/, '')
   return (
     (protocol === 'http:' || protocol === 'https:') &&
@@ -3393,7 +3465,7 @@ async function reconcileBrowserTab(tabId: number): Promise<void> {
   const enrollment = browserEnrollment
   if (!enrollment || !canEnrollBrowserTabs(enrollment)) return
   try {
-    await debuggerReset
+    await Promise.all([debuggerReset, fileAccessReady])
     const tab = await chrome.tabs.get(tabId)
     const win = await chrome.windows.get(tab.windowId)
     if (!canEnrollBrowserTabs(enrollment)) return
@@ -3413,7 +3485,17 @@ async function reconcileBrowserTab(tabId: number): Promise<void> {
       if (enrollment.tabs.has(tabId)) await dropBrowserTab(tabId)
       return
     }
-    if (current) return
+    if (current) {
+      if (enrollment.tabs.has(tabId) && group?.groupKey && !current.groupKey) {
+        if (current.state === 'connected') {
+          await dropBrowserTab(tabId)
+          if (canEnrollBrowserTabs(enrollment)) void reconcileBrowserTab(tabId)
+        } else {
+          setTabConnecting(tabId, group)
+        }
+      }
+      return
+    }
     if (pendingRelayTabCreates > 0) {
       deferredBrowserTabs.add(tabId)
       return
@@ -4729,19 +4811,7 @@ let connectionSettingsError = ''
 
 async function stopRemoteForSettings(): Promise<void> {
   if (remoteTunnel || tailcatStarting) stopRemoteControl()
-  if (
-    remoteCleanup &&
-    !(await withTimeout(
-      remoteCleanup.then(
-        () => true,
-        () => false,
-      ),
-      10_000,
-      false,
-    ))
-  ) {
-    throw new ConfigurationError('ROUTE_CLEANUP_FAILED', 'Previous connection cleanup is incomplete')
-  }
+  await waitForRouteCleanup(remoteCleanup)
 }
 
 function isRemoteOnline(runtime: RemoteTunnelRuntime): boolean {
@@ -4753,7 +4823,7 @@ function isRemoteOnline(runtime: RemoteTunnelRuntime): boolean {
 }
 
 async function getSettingsConnection(): Promise<ActiveConnection> {
-  if (settingsTransition) return { kind: 'transition', phase: settingsTransition.kind, route: settingsTransition.route }
+  if (settingsTransition) return { kind: 'transition', phase: settingsTransition.kind, name: settingsTransition.name }
   const local = await connectionManager.localStatus()
   if (!remoteTunnel) return local
   const { scope, route } = remoteTunnel
@@ -4762,7 +4832,10 @@ async function getSettingsConnection(): Promise<ActiveConnection> {
     const tabs = Array.from(scope.enrollment.tabs.keys()).filter(
       (tabId) => store.getState().tabs.get(tabId)?.state === 'connected',
     ).length
-    return { kind: 'remote', route: scope.enrollment.route, scope: 'browser', online, tabs }
+    if (route === 'hosted') return { kind: 'remote', route, scope: 'browser', online, tabs }
+    if (remoteTunnel.source === 'settings') {
+      return { kind: 'remote', route, scope: 'browser', online, tabs, server: serverChoice(remoteTunnel.server) }
+    }
   }
   return {
     kind: 'remote',
@@ -4773,8 +4846,8 @@ async function getSettingsConnection(): Promise<ActiveConnection> {
 }
 
 async function handleConnectionSettings(request: ConnectionRequest): Promise<ConnectionReply> {
-  const preferences = await getConnectionPreferences(request)
   await remoteRestore
+  const { preferences, selected } = await getConnectionPreferences(request)
   switch (request.kind) {
     case 'status':
       break
@@ -4792,32 +4865,39 @@ async function handleConnectionSettings(request: ConnectionRequest): Promise<Con
         : { kind: 'command', command: `playwriter session new --remote ${runtime.tunnelId}` }
     }
     case 'connect': {
-      const { route, tailcatServerId } = preferences.pending
-      if (route === 'tailcat' && tailcatServerId !== null) {
-        return { kind: 'error', message: 'Custom Tailcat servers are unavailable in Connection settings.' }
+      const { target } = request
+      if (
+        target.route !== preferences.pending.route ||
+        (target.route === 'tailcat' && (!selected || !sameServer(target.server, selected)))
+      ) {
+        return { kind: 'error', message: 'The selected connection changed. Review your choice and try again.' }
       }
-      if (request.confirmedRoute && request.confirmedRoute !== route) {
-        return { kind: 'error', message: 'The selected route changed. Choose a route and try again.' }
+      const { route } = target
+      if (settingsTransition || connectionManager.changingLocalAccess) break
+      if (browserEnrollment?.route === route) {
+        if (route !== 'tailcat') break
+        if (
+          remoteTunnel?.route === 'tailcat' &&
+          remoteTunnel.source === 'settings' &&
+          sameServer(target.server, remoteTunnel.server)
+        )
+          break
       }
-      if (route !== 'local' && request.confirmedRoute !== route) {
-        return { kind: 'error', message: 'Confirm browser sharing before connecting.' }
-      }
-      if (settingsTransition || connectionManager.changingLocalAccess || browserEnrollment?.route === route) break
       connectionSettingsError = ''
-      settingsTransition = { kind: 'connecting', route }
+      settingsTransition = { kind: 'connecting', name: routeName(route, selected) }
       try {
         await stopRemoteForSettings()
         if (route === 'local') {
           await connectionManager.connectFromSettings()
         } else {
           await connectionManager.disconnectFromSettings({ all: true })
-          if (route === 'tailcat') {
+          if (route === 'tailcat' && selected) {
             if (__PLAYWRITER_TAILCAT_ENABLED__) {
-              await startRemoteTunnel({ kind: 'browser' }, { route, derpMapURL: PUBLIC_DERP_MAP })
+              await startRemoteTunnel({ kind: 'browser' }, { route, source: 'settings', server: selected })
             } else {
               connectionSettingsError = 'Tailcat assets are not included in this build. Use a Tailcat-enabled build.'
             }
-          } else {
+          } else if (route === 'hosted') {
             await startRemoteTunnel({ kind: 'browser' }, { route })
           }
         }
@@ -4829,11 +4909,19 @@ async function handleConnectionSettings(request: ConnectionRequest): Promise<Con
               () => true,
               () => false,
             )
-        connectionSettingsError = cleaned
-          ? route === 'local'
-            ? 'Could not reach the local relay. Start Playwriter on this computer and try again.'
-            : `Could not connect through ${route === 'tailcat' ? 'Public Tailcat' : 'playwriter.dev'}. Try again.`
-          : 'Previous connection cleanup is incomplete. Try again or reload the extension.'
+        if (!cleaned) {
+          connectionSettingsError = 'Previous connection cleanup is incomplete. Try again or reload the extension.'
+        } else if (route === 'local') {
+          connectionSettingsError = 'Could not reach the local relay. Start Playwriter on this computer and try again.'
+        } else if (route === 'tailcat' && selected?.kind === 'custom') {
+          const detail =
+            error instanceof ConfigurationError && error.code === 'TAILCAT_START_FAILED'
+              ? error.message
+              : 'Check the configuration in Manage Servers and try again.'
+          connectionSettingsError = `Could not connect through the selected Tailcat server. ${detail}`
+        } else {
+          connectionSettingsError = `Could not connect through ${routeName(route, selected)}. Try again.`
+        }
       } finally {
         settingsTransition = undefined
       }
@@ -4842,8 +4930,10 @@ async function handleConnectionSettings(request: ConnectionRequest): Promise<Con
     case 'disconnect': {
       if (settingsTransition) break
       const route = remoteTunnel?.route ?? 'local'
+      const server =
+        remoteTunnel?.route === 'tailcat' && remoteTunnel.source === 'settings' ? remoteTunnel.server : undefined
       connectionSettingsError = ''
-      settingsTransition = { kind: 'disconnecting', route }
+      settingsTransition = { kind: 'disconnecting', name: routeName(route, server) }
       try {
         if (remoteTunnel || tailcatStarting) {
           await stopRemoteForSettings()
@@ -4858,7 +4948,16 @@ async function handleConnectionSettings(request: ConnectionRequest): Promise<Con
       break
     }
   }
-  return { kind: 'status', preferences, connection: await getSettingsConnection(), error: connectionSettingsError }
+  const current =
+    request.kind === 'connect' || request.kind === 'disconnect'
+      ? (await getConnectionPreferences({ kind: 'status' })).preferences
+      : preferences
+  return {
+    kind: 'status',
+    preferences: current,
+    connection: await getSettingsConnection(),
+    error: connectionSettingsError,
+  }
 }
 
 // Handle messages from the in-page toolbar
@@ -4867,12 +4966,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (sender.id !== chrome.runtime.id || sender.url !== chrome.runtime.getURL(CONNECTION_SETTINGS_PAGE)) return false
     const request = parseConnectionRequest(message.request)
     if (!request) return false
-    void handleConnectionSettings(request).then(sendResponse, () => {
+    void handleConnectionSettings(request).then(sendResponse, (error: unknown) => {
       logger.debug('Connection settings request failed')
       sendResponse({
         kind: 'error',
-        message: 'Could not update Connection settings. Try again.',
+        message:
+          error instanceof ConfigurationError
+            ? configurationError(error)
+            : 'Could not update Connection settings. Try again.',
       } satisfies ConnectionReply)
+    })
+    return true
+  }
+  if (message?.action === 'manageTailcatServers') {
+    if (sender.id !== chrome.runtime.id || sender.url !== chrome.runtime.getURL(MANAGE_SERVERS_PAGE)) return false
+    const request = parseServerRequest(message.request)
+    if (!request) return false
+    const respond = async (): Promise<ServerReply> => {
+      const result = await manageServer(request)
+      if ('custom' in result) return { kind: 'directory', directory: result }
+      const configuration = await fetchDERPMap(result.derpMapURL)
+      return { kind: 'validated', regions: Object.keys(configuration.map.Regions).length }
+    }
+    void respond().then(sendResponse, (error) => {
+      sendResponse({ kind: 'error', message: configurationError(error) } satisfies ServerReply)
     })
     return true
   }
@@ -5023,6 +5140,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (epoch !== tailcatEpoch) throw new ConfigurationError('SHARE_REVOKED', 'Sharing was stopped')
         await startRemoteControl(message.tabId, {
           route: 'tailcat',
+          source: 'legacy',
           derpMapURL: profile.derpMapURL,
           profileId: profile.id,
           deadline,

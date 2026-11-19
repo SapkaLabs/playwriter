@@ -82,6 +82,7 @@ export default defineConfig({
         welcome: resolve(__dirname, 'src/welcome.html'),
         tutorial: resolve(__dirname, 'src/tutorial.html'),
         'connection-settings': resolve(__dirname, 'src/connection-settings.html'),
+        'manage-servers': resolve(__dirname, 'src/manage-servers.html'),
         'tailcat-share': resolve(__dirname, 'src/tailcat-share.html'),
       },
       output: {

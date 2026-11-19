@@ -40,6 +40,8 @@ function render(reply: Extract<ConnectionReply, { kind: 'status' }>): void {
   if (connection.kind === 'remote') {
     const name = connection.route === 'hosted' ? 'playwriter.dev' : 'Tailcat'
     setText(state, connection.online ? `Connected to ${name}` : `Connecting to ${name}…`)
+  } else if (connection.kind === 'connected' && connection.scope === 'tab') {
+    setText(state, 'Connected to Local (per tab)')
   } else {
     setText(state, labels[connection.kind])
   }
@@ -63,7 +65,7 @@ function render(reply: Extract<ConnectionReply, { kind: 'status' }>): void {
   disconnect.hidden = connection.kind === 'disconnected' || connection.kind === 'connecting'
   disconnect.disabled = busy
   routes.disabled = busy
-  connect.disabled = busy || route !== 'local' || connection.kind === 'connected'
+  connect.disabled = busy || route !== 'local' || (connection.kind === 'connected' && connection.scope === 'browser')
   for (const input of routeInputs) input.checked = input.value === route
   serverChoice.hidden = route !== 'tailcat'
   const optionsKey = JSON.stringify(preferences.servers)

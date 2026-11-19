@@ -21,7 +21,7 @@ export type ConnectionRequest =
 export type LocalConnection =
   | { kind: 'disconnected' }
   | { kind: 'connecting' }
-  | { kind: 'connected'; tabs: number }
+  | { kind: 'connected'; scope: 'tab' | 'browser'; tabs: number }
   | { kind: 'reconnecting' }
   | { kind: 'disconnecting' }
 

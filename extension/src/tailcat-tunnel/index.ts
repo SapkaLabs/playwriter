@@ -2,7 +2,7 @@ import { FramedStream, PendingDataBudget, utf8Length, MAX_CHUNK } from 'playwrit
 import type { RemoteTunnelOptions, TunnelConnectionHandlers } from '../remote-tunnel'
 import { waitTailcatBarrier, tailcatMapFetch } from './test-controls'
 import { fetchDERPMap } from 'playwriter/src/tailcat-tunnel/map'
-import { configurationError, type ServerProfile } from 'playwriter/src/tailcat-tunnel/config'
+import { configurationError } from 'playwriter/src/tailcat-tunnel/config'
 import type { DescriptorV2 } from 'playwriter/src/tailcat-tunnel/descriptor'
 
 export class TailcatTunnel {
@@ -33,6 +33,9 @@ export class TailcatTunnel {
   private abort = new AbortController()
   private descriptor: DescriptorV2 | null = null
   private relayAvailable = false
+  get isReady(): boolean {
+    return this.relayAvailable && this.descriptor !== null
+  }
   private resolveDisposed!: () => void
   private rejectDisposed!: (error: Error) => void
   readonly disposed = new Promise<void>((resolve, reject) => {
@@ -42,7 +45,8 @@ export class TailcatTunnel {
 
   constructor(
     private options: RemoteTunnelOptions & {
-      profile?: ServerProfile
+      derpMapURL: string
+      keepAlive: boolean
       deadline?: number
       ensureOffscreen(): Promise<void>
       onFatal(reason: string): void
@@ -64,8 +68,7 @@ export class TailcatTunnel {
     )
     if (import.meta.env.TESTING) await waitTailcatBarrier('startup-before-listen')
     if (this.closed) return
-    if (!this.options.profile) throw new Error('No selected profile')
-    const configuration = await fetchDERPMap(this.options.profile.derpMapURL, {
+    const configuration = await fetchDERPMap(this.options.derpMapURL, {
       signal: this.abort.signal,
       fetch: import.meta.env.TESTING ? tailcatMapFetch : undefined,
     })
@@ -84,6 +87,7 @@ export class TailcatTunnel {
         return
       }
       if (this.closed) return
+      if (data.heartbeat) return
       if (typeof data.relayAvailable === 'boolean') {
         this.relayAvailable = data.relayAvailable
         if (this.relayAvailable && this.descriptor) {
@@ -111,7 +115,11 @@ export class TailcatTunnel {
       if (data.error) request.reject(new Error(data.error))
       else request.resolve(data.result)
     })
-    const { addr } = await this.request('start', { assetRoot: chrome.runtime.getURL('tailcat/'), configuration })
+    const { addr } = await this.request('start', {
+      assetRoot: chrome.runtime.getURL('tailcat/'),
+      configuration,
+      keepAlive: this.options.keepAlive,
+    })
     if (this.closed) return
     this.descriptor = {
       v: 2,

@@ -6,6 +6,8 @@ import { dirname, join, resolve, relative } from 'node:path'
 import { parseArgs } from 'node:util'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const output = join(root, 'dist/public-derp')
+const suppliedAssets = process.env.PLAYWRITER_TAILCAT_ASSETS
+const assets = suppliedAssets ? resolve(suppliedAssets) : join(root, 'dist/tailcat')
 const { values } = parseArgs({
   options: { go: { type: 'string', default: 'go' }, testing: { type: 'boolean', default: false } },
 })
@@ -18,15 +20,15 @@ async function run(args, env = process.env) {
     child.on('exit', (code) => (code === 0 ? ok() : fail(new Error(`Build stage failed (${code})`))))
   })
 }
-await run(['scripts/build-tailcat.mjs', '--go', values.go])
-await run([pnpmScript, '--filter', 'playwriter', 'build'])
+await run(['scripts/build-tailcat.mjs', '--out', assets, ...(suppliedAssets ? ['--verify'] : ['--go', values.go])])
+await run([pnpmScript, '--filter', 'playwriter', 'build'], { ...process.env, PLAYWRITER_TAILCAT_ASSETS: '' })
 const extensionOutput = join(root, 'extension/dist-derp-delivery')
 if (relative(root, extensionOutput).replaceAll('\\', '/') !== 'extension/dist-derp-delivery')
   throw new Error('Unsafe extension output')
 await rm(extensionOutput, { recursive: true, force: true })
 await run([pnpmScript, '--filter', 'mcp-extension', 'build'], {
   ...process.env,
-  PLAYWRITER_TAILCAT_ASSETS: join(root, 'dist/tailcat'),
+  PLAYWRITER_TAILCAT_ASSETS: assets,
   PLAYWRITER_EXTENSION_DIST: 'dist-derp-delivery',
   PLAYWRITER_PORT: '19987',
   PLAYWRITER_OPEN_WELCOME_PAGE: '0',
@@ -80,7 +82,7 @@ async function pruneUntrackedSource(directory, prefix = 'src/') {
   }
 }
 await pruneUntrackedSource(join(controller, 'src'))
-await cp(join(root, 'dist/tailcat'), join(controller, 'tailcat'), { recursive: true })
+await cp(assets, join(controller, 'tailcat'), { recursive: true })
 await writeFile(join(controller, 'playwriter.cmd'), '@echo off\r\nnode "%~dp0bin.js" %*\r\n')
 await writeFile(join(controller, 'playwriter-tailcat.cmd'), '@echo off\r\nnode "%~dp0tailcat-bin.js" %*\r\n')
 await cp(join(root, 'LICENSE'), join(output, 'LICENSE'))

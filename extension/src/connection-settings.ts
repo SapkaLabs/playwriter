@@ -6,6 +6,7 @@ const CONNECTION_SETTINGS_KEY = 'playwriterConnectionSettings'
 export const TAILCAT_PROFILES_KEY = 'tailcatProfiles'
 
 export type Route = 'local' | 'hosted' | 'tailcat'
+export type RemoteRoute = Exclude<Route, 'local'>
 
 export function isRoute(route: unknown): route is Route {
   return route === 'local' || route === 'hosted' || route === 'tailcat'
@@ -15,9 +16,9 @@ export type ConnectionRequest =
   | { kind: 'status' }
   | { kind: 'select'; route: Route }
   | { kind: 'select-server'; id: string | null }
-  | { kind: 'connect'; confirmedRoute?: 'hosted' }
+  | { kind: 'connect'; confirmedRoute?: RemoteRoute }
   | { kind: 'disconnect' }
-  | { kind: 'copy-command' }
+  | { kind: 'copy-connection' }
 
 export type LocalConnection =
   | { kind: 'disconnected' }
@@ -29,8 +30,8 @@ export type LocalConnection =
 export type ActiveConnection =
   | LocalConnection
   | { kind: 'transition'; route: Route; phase: 'connecting' | 'disconnecting' }
-  | { kind: 'remote'; route: 'hosted' | 'tailcat'; scope: 'tab'; online: boolean }
-  | { kind: 'remote'; route: 'hosted'; scope: 'browser'; online: boolean; tabs: number }
+  | { kind: 'remote'; route: RemoteRoute; scope: 'tab'; online: boolean }
+  | { kind: 'remote'; route: RemoteRoute; scope: 'browser'; online: boolean; tabs: number }
 
 type PendingSelection = { route: Route; tailcatServerId: string | null }
 
@@ -42,6 +43,7 @@ type Preferences = {
 export type ConnectionReply =
   | { kind: 'status'; preferences: Preferences; connection: ActiveConnection; error: string }
   | { kind: 'command'; command: string }
+  | { kind: 'descriptor'; descriptor: string }
   | { kind: 'error'; message: string }
 
 export function parseConnectionRequest(value: unknown): ConnectionRequest | undefined {
@@ -49,11 +51,11 @@ export function parseConnectionRequest(value: unknown): ConnectionRequest | unde
   switch (value.kind) {
     case 'status':
     case 'disconnect':
-    case 'copy-command':
+    case 'copy-connection':
       return { kind: value.kind }
     case 'connect':
-      return 'confirmedRoute' in value && value.confirmedRoute === 'hosted'
-        ? { kind: 'connect', confirmedRoute: 'hosted' }
+      return 'confirmedRoute' in value && (value.confirmedRoute === 'hosted' || value.confirmedRoute === 'tailcat')
+        ? { kind: 'connect', confirmedRoute: value.confirmedRoute }
         : { kind: 'connect' }
     case 'select':
       if ('route' in value && isRoute(value.route)) return { kind: 'select', route: value.route }

@@ -10,12 +10,17 @@ chrome.runtime.onConnect.addListener((port) => {
   }
   owner = port
   const worker = new Worker(new URL('./worker.ts', import.meta.url))
-  const dispose = () => {
+  let keepAlive: ReturnType<typeof setInterval> | undefined
+  const release = () => {
+    clearInterval(keepAlive)
     worker.terminate()
     if (owner === port) owner = null
+  }
+  const dispose = () => {
+    release()
     port.disconnect()
   }
-  port.onDisconnect.addListener(dispose)
+  port.onDisconnect.addListener(release)
   worker.onerror = () => {
     port.postMessage({ fatal: 'Transport worker lost; sharing revoked' })
     dispose()
@@ -29,11 +34,15 @@ chrome.runtime.onConnect.addListener((port) => {
   }
   port.onMessage.addListener((data) => {
     if (data.action === 'stop') {
-      worker.terminate()
-      if (owner === port) owner = null
+      release()
       port.postMessage({ stopped: true })
       port.disconnect()
       return
+    }
+    // Keep an explicitly granted browser share alive even with zero attached tabs
+    // and no settings page. The interval only belongs to this transport owner.
+    if (data.action === 'start' && data.keepAlive === true && keepAlive === undefined) {
+      keepAlive = setInterval(() => port.postMessage({ heartbeat: true }), 20_000)
     }
     if (import.meta.env.TESTING && data.action === 'testKill') {
       port.postMessage({ fatal: 'Transport worker terminated for test; sharing revoked' })

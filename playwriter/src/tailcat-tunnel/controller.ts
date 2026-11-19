@@ -28,7 +28,13 @@ async function validateDescriptor(
       maxBuffer: 32768,
     })
     parsed = JSON.parse(result.stdout)
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+      throw new ConfigurationError(
+        'TRANSPORT_UNAVAILABLE',
+        'Tailcat native runtime is missing. Use the Tailcat developer bundle.',
+      )
+    }
     throw new ConfigurationError('DESCRIPTOR_INVALID', 'Malformed Tailcat address')
   }
   // Short addresses select a region from the validated map, never embedded destinations.

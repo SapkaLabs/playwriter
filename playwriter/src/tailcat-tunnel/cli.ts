@@ -126,7 +126,7 @@ async function main(): Promise<void> {
       : values['derp-map-url']
   const configuredDescriptor = descriptorConfiguration(descriptor, assertedMapURL)
   console.error(
-    `Server configuration: ${configuredDescriptor.derpMapURL} (descriptor${assertedMapURL !== undefined ? ', explicit assertion matched' : ''})`,
+    `Server configuration: descriptor${assertedMapURL !== undefined ? ' (explicit assertion matched)' : ''}`,
   )
   cliStage = 'private registry'
   await privateDirectory(registry)
@@ -140,7 +140,7 @@ async function main(): Promise<void> {
   process.on('SIGTERM', () => finish())
   cliStage = 'native/preface/session startup'
   const connection = await connectTailcat({
-    descriptor,
+    descriptor: configuredDescriptor,
     assertedMapURL,
     nativePath:
       values.native ||

@@ -473,7 +473,7 @@ class ConnectionManager {
   // inert if it belongs to a superseded attempt. Fixes the connect/disconnect loop (#40).
   private currentAttemptId = 0
   private legacyAccess = false
-  private readonly accessReady = chrome.storage.session
+  readonly accessReady = chrome.storage.session
     .get([LOCAL_ACCESS_KEY, BROWSER_ACCESS_KEY, OWNED_TAB_GROUPS_KEY])
     .then((stored) => {
       const allowed: unknown = stored[LOCAL_ACCESS_KEY]
@@ -3650,9 +3650,9 @@ async function onActionClicked(tab: chrome.tabs.Tab): Promise<void> {
 chrome.debugger.onEvent.addListener(onDebuggerEvent)
 chrome.debugger.onDetach.addListener(onDebuggerDetach)
 
-// resetDebugger detaches everything, so remote tabs must be restored after it.
+// Wait for debugger cleanup and saved ownership before restoring remote tabs.
 const debuggerReset = resetDebugger().catch((error) => logger.debug('Could not reset browser debuggers:', error))
-const remoteRestore = debuggerReset.then(restoreRemoteTunnelAfterRestart)
+const remoteRestore = Promise.all([debuggerReset, connectionManager.accessReady]).then(restoreRemoteTunnelAfterRestart)
 void remoteRestore
   .finally(() => {
     // Startup sync: clean leftover managed groups from a previous SW/browser

@@ -279,6 +279,9 @@ export function initPlaywriterToolbar(): void {
     .remote-panel button:hover {
       background: rgba(255,255,255,0.08);
     }
+    .remote-panel button[hidden] {
+      display: none;
+    }
     .remote-panel button svg {
       flex-shrink: 0;
       color: rgba(161,161,170,1);

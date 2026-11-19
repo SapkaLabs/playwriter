@@ -454,6 +454,34 @@ test.skipIf(process.env.PLAYWRITER_TEST_LIVE_HOSTED !== '1')(
   75_000,
 )
 
+test('A failed hosted Connect leaves the selection pending and revokes Local', async () => {
+  const edge = new WebSocketServer({ host: '127.0.0.1', port: 0 })
+  try {
+    await once(edge, 'listening')
+    const address = edge.address()
+    if (!address || typeof address === 'string') throw new Error('No hosted tunnel fixture port')
+    edge.on('connection', (socket) => socket.close(1013, 'Unavailable'))
+    await withSettings(
+      async ({ settings, status, route, connect, cli }) => {
+        await connect.click()
+        await status.getByText('Connected to Local', { exact: true }).waitFor()
+        expect((await cli('session', 'new')).ok).toBe(true)
+        await route('playwriter.dev').check()
+        await connect.click()
+        await settings.getByRole('dialog').getByRole('button', { name: 'Share browser' }).click()
+        await status.getByText('Disconnected', { exact: true }).waitFor({ timeout: 20_000 })
+        await settings.getByRole('alert').getByText('Could not connect through playwriter.dev. Try again.').waitFor()
+        expect(await route('playwriter.dev').isChecked()).toBe(true)
+        expect((await cli('session', 'new')).ok).toBe(false)
+      },
+      { initializeProfile: (worker) => redirectHostedTransport(worker, `ws://127.0.0.1:${address.port}`) },
+    )
+  } finally {
+    for (const socket of edge.clients) socket.terminate()
+    await new Promise<void>((resolve) => edge.close(() => resolve()))
+  }
+}, 45_000)
+
 test('Local settings grant and revoke actual CLI access', async () => {
   const fixture = await createSimpleServer({ routes: { '/': '<title>Local fixture</title><h1>Ready</h1>' } })
   const fixtureUrl = new URL('/', fixture.baseUrl).href

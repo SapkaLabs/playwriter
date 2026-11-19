@@ -54,15 +54,12 @@ export function getCdpUrl({
   sessionId,
   tabGroup,
   tabGroupColor,
-  client,
   patchright,
 }: {
   port?: number
   host?: string
   token?: string
   extensionId?: string | null
-  /** Which client opens this connection, for anonymous usage stats. Old relays ignore it. */
-  client?: 'mcp'
   /** CLI session id, sent as ?session= so the relay can map this client to its session */
   sessionId?: string
   /** Tab group title for tabs this client creates (default 'playwriter'). Old relays ignore it. */
@@ -92,9 +89,6 @@ export function getCdpUrl({
   if (patchright) {
     params.set('patchright', '1')
   }
-  if (client) {
-    params.set('client', client)
-  }
   const queryString = params.toString()
   const suffix = queryString ? `?${queryString}` : ''
   const { wsBaseUrl } = parseRelayHost(host, port)
@@ -114,6 +108,23 @@ const LOG_BASE_DIR = path.join(os.homedir(), '.playwriter')
 export const LOG_FILE_PATH = process.env.PLAYWRITER_LOG_FILE_PATH || path.join(LOG_BASE_DIR, 'relay-server.log')
 export const LOG_CDP_FILE_PATH =
   process.env.PLAYWRITER_CDP_LOG_FILE_PATH || path.join(path.dirname(LOG_FILE_PATH), 'cdp.jsonl')
+
+/** Logs hold cookies, typed text and page content: only this OS user may read them. */
+export const PRIVATE_FILE_MODE = 0o600
+const PRIVATE_DIR_MODE = 0o700
+
+/** Create a log file's folder and make the file private. Only ~/.playwriter itself is chmodded, never a custom folder. */
+export function preparePrivateLogFile(filePath: string): void {
+  const dir = path.dirname(filePath)
+  fs.mkdirSync(dir, { recursive: true, mode: PRIVATE_DIR_MODE })
+  // Older versions created ~/.playwriter as 0755
+  if (path.resolve(dir) === LOG_BASE_DIR) {
+    fs.chmodSync(dir, PRIVATE_DIR_MODE)
+  }
+  fs.writeFileSync(filePath, '', { mode: PRIVATE_FILE_MODE })
+  // writeFileSync only applies the mode to new files
+  fs.chmodSync(filePath, PRIVATE_FILE_MODE)
+}
 
 const packageJsonPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'package.json')
 export const VERSION = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8')).version as string

@@ -426,7 +426,45 @@ function markAllTabsConnecting(tabs: Map<number, TabInfo>): Map<number, TabInfo>
 
 // A Local grant survives worker suspension. The pending choice survives browser restarts separately.
 const LOCAL_ACCESS_KEY = 'playwriterLocalAccess'
+const BROWSER_ACCESS_KEY = 'playwriterBrowserLocalAccess'
+const OWNED_TAB_GROUPS_KEY = 'playwriterOwnedTabGroups'
 const LOCAL_ACCESS_STOPPED = 'Local access was disconnected.'
+
+type TabGroup = Pick<TabInfo, 'groupTitle' | 'groupKey' | 'groupColor'>
+type BrowserTabOrigin = 'discovered' | 'created'
+type BrowserEnrollment = { tabs: Map<number, BrowserTabOrigin> }
+let browserEnrollment: BrowserEnrollment | undefined
+const ownedTabGroups = new Map<number, TabGroup>()
+
+function restoreOwnedTabGroups(value: unknown): void {
+  if (!value || typeof value !== 'object') return
+  for (const [id, entry] of Object.entries(value)) {
+    const tabId = Number(id)
+    const group: unknown = entry
+    if (!Number.isInteger(tabId) || !group || typeof group !== 'object') continue
+    if (!('groupKey' in group) || typeof group.groupKey !== 'string' || !group.groupKey) continue
+    ownedTabGroups.set(tabId, {
+      groupKey: group.groupKey,
+      groupTitle: 'groupTitle' in group ? (normalizeTabGroupTitle(group.groupTitle) ?? undefined) : undefined,
+      groupColor: 'groupColor' in group ? (normalizeTabGroupColor(group.groupColor) ?? undefined) : undefined,
+    })
+  }
+}
+
+function saveOwnedTabGroups(): void {
+  void chrome.storage.session.set({ [OWNED_TAB_GROUPS_KEY]: Object.fromEntries(ownedTabGroups) }).catch((error) => {
+    logger.debug('Could not save tab ownership:', error)
+  })
+}
+
+function rememberTabGroup(tabId: number, { groupKey, groupTitle, groupColor }: TabGroup): void {
+  if (!groupKey) return
+  const previous = ownedTabGroups.get(tabId)
+  if (previous?.groupKey === groupKey && previous.groupTitle === groupTitle && previous.groupColor === groupColor)
+    return
+  ownedTabGroups.set(tabId, { groupKey, groupTitle, groupColor })
+  saveOwnedTabGroups()
+}
 
 class ConnectionManager {
   ws: WebSocket | null = null
@@ -437,13 +475,15 @@ class ConnectionManager {
   // clobber `this.ws` of a newer attempt. Every socket callback checks this id and goes
   // inert if it belongs to a superseded attempt. Fixes the connect/disconnect loop (#40).
   private currentAttemptId = 0
-  private accessAllowed = false
+  private legacyAccess = false
   private readonly accessReady = chrome.storage.session
-    .get(LOCAL_ACCESS_KEY)
+    .get([LOCAL_ACCESS_KEY, BROWSER_ACCESS_KEY, OWNED_TAB_GROUPS_KEY])
     .then((stored) => {
       const allowed: unknown = stored[LOCAL_ACCESS_KEY]
-      this.accessAllowed =
+      this.legacyAccess =
         typeof allowed === 'boolean' ? allowed : __PLAYWRITER_AUTO_CONNECT_LOCAL__ || import.meta.env.TESTING
+      restoreOwnedTabGroups(stored[OWNED_TAB_GROUPS_KEY])
+      if (stored[BROWSER_ACCESS_KEY] === true) browserEnrollment = { tabs: new Map() }
     })
     .catch((error) => logger.debug('Could not restore Local access:', error))
   private transition: 'connecting' | 'disconnecting' | undefined
@@ -455,7 +495,11 @@ class ConnectionManager {
   }
 
   get allowsLocalAccess(): boolean {
-    return this.accessAllowed
+    return this.legacyAccess || browserEnrollment !== undefined
+  }
+
+  get allowsLegacyAccess(): boolean {
+    return this.legacyAccess
   }
 
   get changingLocalAccess(): boolean {
@@ -465,59 +509,70 @@ class ConnectionManager {
   async localStatus(): Promise<LocalConnection> {
     await this.accessReady
     if (this.transition) return { kind: this.transition }
-    if (!this.accessAllowed) return { kind: 'disconnected' }
+    if (!this.allowsLocalAccess) return { kind: 'disconnected' }
     if (this.ws?.readyState !== WebSocket.OPEN || this.connectionPromise) return { kind: 'reconnecting' }
     const tabs = Array.from(store.getState().tabs.values()).filter((tab) => tab.state === 'connected').length
-    return { kind: 'connected', tabs }
+    return { kind: 'connected', scope: browserEnrollment ? 'browser' : 'tab', tabs }
   }
 
   async allowFromTab(): Promise<boolean> {
     await this.accessReady
     if (this.transition) return false
-    if (!this.accessAllowed) {
+    if (!this.legacyAccess) {
       const revocation = this.revocation
       await chrome.storage.session.set({ [LOCAL_ACCESS_KEY]: true })
       if (revocation !== this.revocation || this.transition) return false
-      this.accessAllowed = true
+      this.legacyAccess = true
     }
     return true
   }
 
   async connectFromSettings(): Promise<void> {
     await this.accessReady
-    if (this.transition) return
+    if (this.transition || browserEnrollment) return
     this.transition = 'connecting'
     try {
       await stopRemoteForSettings()
-      this.accessAllowed = true
+      browserEnrollment = { tabs: new Map() }
       if (store.getState().connectionState === 'extension-replaced') {
         store.setState({ connectionState: 'idle', errorText: undefined })
       }
       await this.ensureConnection()
-      await chrome.storage.session.set({ [LOCAL_ACCESS_KEY]: true })
+      await chrome.storage.session.set({ [BROWSER_ACCESS_KEY]: true })
       store.setState({ connectionState: 'connected', errorText: undefined })
       this.preserveTabsOnDetach = false
+      void enrollBrowserTabs()
     } catch (error) {
-      await this.revokeAccess()
+      await this.revokeAccess('browser')
       throw error
     } finally {
       this.transition = undefined
     }
   }
 
-  async disconnectFromSettings(): Promise<void> {
+  async disconnectFromSettings({ browserOnly = false } = {}): Promise<void> {
     await this.accessReady
     if (this.transition) return
+    if (browserOnly && !browserEnrollment) return
     this.transition = 'disconnecting'
     try {
-      await this.revokeAccess()
+      await this.revokeAccess(browserEnrollment ? 'browser' : 'tab')
     } finally {
       this.transition = undefined
     }
   }
 
-  private async revokeAccess(): Promise<void> {
-    this.accessAllowed = false
+  private async revokeAccess(scope: 'browser' | 'tab'): Promise<void> {
+    const enrollment = browserEnrollment
+    if (scope === 'browser') browserEnrollment = undefined
+    else this.legacyAccess = false
+    const persisted = chrome.storage.session.set({
+      [scope === 'browser' ? BROWSER_ACCESS_KEY : LOCAL_ACCESS_KEY]: false,
+    })
+    if (this.allowsLocalAccess) {
+      await Promise.all([persisted, withTimeout(detachBrowserTabs(enrollment), 3000, [])])
+      return
+    }
     this.revocationCount++
     this.currentAttemptId++
     const socket = this.pendingSocket ?? this.ws
@@ -529,18 +584,19 @@ class ConnectionManager {
     skillRecordingId = null
     setRecorderStateInAllTabs(false)
     store.setState({ connectionState: 'idle', errorText: undefined })
-    const detach = remoteTunnel === null
-      ? Promise.allSettled([
-        ...Array.from(store.getState().tabs.keys(), (tabId) => detachTab(tabId, true)),
-        ...inFlightTabAttaches.values(),
-      ])
-      : Promise.resolve([])
-    await Promise.all([chrome.storage.session.set({ [LOCAL_ACCESS_KEY]: false }), withTimeout(detach, 3000, [])])
+    const detach =
+      remoteTunnel === null
+        ? Promise.allSettled([
+            ...Array.from(store.getState().tabs.keys(), (tabId) => detachTab(tabId, true)),
+            ...inFlightTabAttaches.values(),
+          ])
+        : Promise.resolve([])
+    await Promise.all([persisted, withTimeout(detach, 3000, [])])
   }
 
   async ensureConnection(): Promise<void> {
     await this.accessReady
-    if (!this.accessAllowed) throw new Error(LOCAL_ACCESS_STOPPED)
+    if (!this.allowsLocalAccess) throw new Error(LOCAL_ACCESS_STOPPED)
     // Reuse in-progress connection attempt - prevents races between user clicks and maintain loop
     if (this.connectionPromise) {
       return this.connectionPromise
@@ -579,7 +635,7 @@ class ConnectionManager {
 
   private async connect(): Promise<void> {
     const attemptId = ++this.currentAttemptId
-    const isCurrent = () => attemptId === this.currentAttemptId && this.accessAllowed
+    const isCurrent = () => attemptId === this.currentAttemptId && this.allowsLocalAccess
     logger.debug(`Waiting for server at http://${RELAY_HOST}:${RELAY_PORT}...`)
 
     // Retry for up to 5 seconds with 1s intervals, then give up (maintain loop will retry later)
@@ -792,7 +848,7 @@ class ConnectionManager {
   async maintainLoop(): Promise<void> {
     await this.accessReady
     while (true) {
-      if (!this.accessAllowed || this.transition || this.ws?.readyState === WebSocket.OPEN) {
+      if (!this.allowsLocalAccess || this.transition || this.ws?.readyState === WebSocket.OPEN) {
         await sleep(1000)
         continue
       }
@@ -849,12 +905,13 @@ class ConnectionManager {
       try {
         const revocation = this.revocation
         await this.ensureConnection()
-        if (this.accessAllowed && revocation === this.revocation) {
+        if (this.allowsLocalAccess && revocation === this.revocation) {
           store.setState({ connectionState: 'connected' })
           this.preserveTabsOnDetach = false
+          void enrollBrowserTabs()
         }
       } catch (error: any) {
-        if (!this.accessAllowed) continue
+        if (!this.allowsLocalAccess) continue
         logger.debug('Connection attempt failed:', error.message)
         // Check if rejected because another extension is actively in use
         if (error.message === 'Extension Already In Use') {
@@ -1099,11 +1156,15 @@ async function dispatchRelayMessage(message: any, sink: RelayMessageSink): Promi
       const groupColor = normalizeTabGroupColor(initialTabParams?.tabGroupColor) || undefined
       logger.debug('Creating initial tab for Playwright client, group:', groupTitle || DEFAULT_TAB_GROUP_TITLE)
       assertActive()
-      const tab = await createTabInPreferredWindow({ url: 'about:blank', active: false, assertActive })
+      const tab = await createTabInPreferredWindow({
+        url: 'about:blank',
+        assertActive,
+        group: { groupTitle, groupKey, groupColor },
+        remote: Boolean(sink.remoteRuntime),
+      })
       if (tab.id) {
         assertActive()
         const tabId = tab.id
-        setTabConnecting(tabId, { groupTitle, groupKey, groupColor })
         const attach = () => {
           assertActive()
           return attachTab(tabId, { skipAttachedEvent: true, assertActive })
@@ -1351,26 +1412,49 @@ async function getPreferredWindowId(): Promise<number | undefined> {
   }
 }
 
+let pendingRelayTabCreates = 0
+const deferredBrowserTabs = new Set<number>()
+
 async function createTabInPreferredWindow(options: {
   url: string
-  active: boolean
-  assertActive?(): void
+  group: TabGroup
+  remote: boolean
+  assertActive(): void
 }): Promise<chrome.tabs.Tab> {
-  const windowId = await getPreferredWindowId()
-  if (import.meta.env.TESTING) await waitTailcatBarrier('create-tab')
-  const createProperties: chrome.tabs.CreateProperties = {
-    url: options.url,
-    active: options.active,
-    ...(windowId !== undefined ? { windowId } : {}),
+  let windowId = await getPreferredWindowId()
+  if (browserEnrollment) {
+    const windows = (await chrome.windows.getAll({ windowTypes: ['normal'] })).filter((window) => !window.incognito)
+    windowId = (windows.find((window) => window.id === windowId) ?? windows[0])?.id
+    if (windowId === undefined) throw new Error('No regular browser window is available.')
   }
+  if (import.meta.env.TESTING) await waitTailcatBarrier('create-tab')
 
-  options.assertActive?.()
+  options.assertActive()
+  pendingRelayTabCreates++
   try {
-    return await chrome.tabs.create(createProperties)
-  } catch (error) {
-    options.assertActive?.()
-    logger.debug('Could not create tab in preferred window, falling back:', (error as Error).message)
-    return await chrome.tabs.create({ url: options.url, active: options.active })
+    const { url } = options
+    const tab = await chrome.tabs.create({ url, active: false, windowId }).catch((error: unknown) => {
+      options.assertActive()
+      if (browserEnrollment) throw error
+      logger.debug('Could not create tab in preferred window, falling back:', error)
+      return chrome.tabs.create({ url, active: false })
+    })
+    options.assertActive()
+    if (tab.id !== undefined) {
+      if (browserEnrollment && !options.remote && !connectionManager.allowsLegacyAccess) {
+        browserEnrollment.tabs.set(tab.id, 'created')
+      }
+      // onCreated can precede the create() result. Set the owner before any
+      // browser-wide enrollment can attach and announce this tab.
+      setTabConnecting(tab.id, options.group)
+    }
+    return tab
+  } finally {
+    pendingRelayTabCreates--
+    if (pendingRelayTabCreates === 0) {
+      for (const tabId of deferredBrowserTabs) void reconcileBrowserTab(tabId)
+      deferredBrowserTabs.clear()
+    }
   }
 }
 
@@ -1438,7 +1522,11 @@ async function syncTabGroup(): Promise<void> {
     const { connectionState } = store.getState()
     const isRelayConnected = connectionState === 'connected'
     const desiredTabs = Array.from(store.getState().tabs.entries())
-      .filter(([_, info]) => info.state === 'connected' || (info.state === 'connecting' && isRelayConnected))
+      .filter(
+        ([tabId, info]) =>
+          (info.state === 'connected' || (info.state === 'connecting' && isRelayConnected)) &&
+          !isUngroupedBrowserTab(tabId, info),
+      )
       .map(([tabId, info]) => ({ tabId, title: info.groupTitle || DEFAULT_TAB_GROUP_TITLE }))
 
     const persisted = await loadManagedTabGroups()
@@ -1448,6 +1536,7 @@ async function syncTabGroup(): Promise<void> {
     // tab carrying an explicit color sets it for its whole group.
     const colorByTitle = new Map<string, chrome.tabGroups.ColorEnum>()
     for (const [tabId, info] of store.getState().tabs) {
+      if (isUngroupedBrowserTab(tabId, info)) continue
       ownedTabIds.add(tabId)
       if (info.groupTitle) {
         managedTitles.add(info.groupTitle)
@@ -1640,9 +1729,13 @@ async function handleCommand(
   }
 
   if (msg.params.method === 'Target.createTarget' || msg.params.method === 'Page.navigate') {
-    const navigationError = getBlockedNavigationError(msg.params.params?.url || 'about:blank')
+    const url = msg.params.params?.url || 'about:blank'
+    const navigationError = getBlockedNavigationError(url)
     if (navigationError) {
       throw new Error(navigationError)
+    }
+    if (browserEnrollment && !isBrowserTabUrl(url, 'created')) {
+      throw new Error('Playwriter clients cannot open restricted browser pages.')
     }
   }
 
@@ -1651,7 +1744,14 @@ async function handleCommand(
   let targetTab = resolved?.tab
   // Hold commands while reattachTab restores the session (same sessionId), Chrome would reject them.
   if (targetTabId) {
-    await tabReattaches.get(targetTabId)
+    const reattach = tabReattaches.get(targetTabId)
+    if (reattach) await reattach
+    const current = store.getState().tabs.get(targetTabId)
+    if (current && current.sessionId === targetTab?.sessionId) {
+      targetTab = current
+    } else {
+      targetTabId = targetTab = undefined
+    }
   }
   assertActive()
 
@@ -1731,11 +1831,15 @@ async function handleCommand(
       const groupColor = normalizeTabGroupColor(msg.params.tabGroupColor) || undefined
       logger.debug('Creating new tab with URL:', url, 'group:', groupTitle || DEFAULT_TAB_GROUP_TITLE)
       assertActive()
-      const tab = await createTabInPreferredWindow({ url, active: false, assertActive })
+      const tab = await createTabInPreferredWindow({
+        url,
+        assertActive,
+        group: { groupTitle, groupKey, groupColor },
+        remote: Boolean(remoteRuntime),
+      })
       if (!tab.id) throw new Error('Failed to create tab')
       assertActive()
       const tabId = tab.id
-      setTabConnecting(tabId, { groupTitle, groupKey, groupColor })
       logger.debug('Created tab:', tabId, 'waiting for it to load...')
       await sleep(100)
       const attach = () => {
@@ -1816,6 +1920,17 @@ function onDebuggerEvent(source: chrome.debugger.DebuggerSession, method: string
 
   const tab = source.tabId ? store.getState().tabs.get(source.tabId) : undefined
   if (!tab) return
+  const origin = source.tabId === undefined ? undefined : browserEnrollment?.tabs.get(source.tabId)
+  if (origin && source.tabId !== undefined) {
+    if (method === 'Page.frameNavigated' && !source.sessionId && !params?.frame?.parentId) {
+      const url: unknown = params?.frame?.url
+      if (typeof url !== 'string' || !isBrowserTabUrl(url, origin)) {
+        void dropBrowserTab(source.tabId)
+        return
+      }
+    }
+    if (tab.state !== 'connected') return
+  }
 
   if (method === 'Page.screencastFrame' && typeof params?.sessionId === 'number') {
     // Central ACK ownership lets slow tunnel viewers drop frames without stalling Chrome.
@@ -1922,6 +2037,7 @@ function onDebuggerDetach(source: chrome.debugger.Debuggee, reason: `${chrome.de
     // in this extension process. Clear every tracked tab so Playwright does not
     // keep sending commands to tabs Chrome already detached from.
     stopRemoteControl()
+    if (browserEnrollment) void connectionManager.disconnectFromSettings({ browserOnly: true }).catch(() => {})
     for (const [detachedTabId, tab] of store.getState().tabs.entries()) {
       detachTabFromPlaywright(detachedTabId, tab)
     }
@@ -2146,6 +2262,18 @@ async function attachTabDebugger(
   const debuggee = { tabId }
   const revocation = connectionManager.revocation
   const startedWithoutRemote = remoteTunnel === null
+  const enrollment = browserEnrollment
+  const origin = enrollment?.tabs.get(tabId)
+  const assertTabActive = () => {
+    assertActive?.()
+    if (
+      (origin &&
+        (!store.getState().tabs.has(tabId) || (enrollment !== browserEnrollment && enrollment?.tabs.has(tabId)))) ||
+      (startedWithoutRemote && revocation !== connectionManager.revocation)
+    ) {
+      throw new Error(LOCAL_ACCESS_STOPPED)
+    }
+  }
   let debuggerAttached = false
 
   try {
@@ -2156,6 +2284,7 @@ async function attachTabDebugger(
     // re-inject between cleanup and retry, so we allow up to 3 attempts.
     const maxAttachAttempts = 3
     for (let attempt = 1; attempt <= maxAttachAttempts; attempt++) {
+      assertTabActive()
       try {
         await chrome.debugger.attach(debuggee, '1.3')
         break
@@ -2175,13 +2304,14 @@ async function attachTabDebugger(
     }
 
     debuggerAttached = true
+    assertTabActive()
     logger.debug('Debugger attached successfully to tab:', tabId)
 
     await chrome.debugger.sendCommand(debuggee, 'Page.enable')
     await removeExtensionPagesFromHistory(debuggee)
 
     // Reapply cached auto-attach for new tabs so OOPIF targets are reported immediately.
-    if (autoAttachParams) {
+    if (autoAttachParams && !origin) {
       try {
         await chrome.debugger.sendCommand(debuggee, 'Target.setAutoAttach', autoAttachParams)
       } catch (error) {
@@ -2195,8 +2325,8 @@ async function attachTabDebugger(
     )) as Protocol.Target.GetTargetInfoResponse
 
     const targetInfo = result.targetInfo
-    assertActive?.()
-    if (startedWithoutRemote && revocation !== connectionManager.revocation) throw new Error(LOCAL_ACCESS_STOPPED)
+    if (origin && !isBrowserTabUrl(targetInfo.url, origin)) throw new Error('Cannot attach to this browser page')
+    assertTabActive()
 
     // Log error if URL is empty - this causes Playwright to create broken pages
     if (!targetInfo.url || targetInfo.url === '' || targetInfo.url === ':') {
@@ -2260,6 +2390,11 @@ async function attachTabDebugger(
     )
 
     injectToolbar(tabId)
+    if (origin && autoAttachParams) {
+      void chrome.debugger.sendCommand(debuggee, 'Target.setAutoAttach', autoAttachParams).catch((error) => {
+        logger.debug('Failed to apply auto-attach for tab:', tabId, error)
+      })
+    }
 
     return { targetInfo, sessionId }
   } catch (error) {
@@ -2523,10 +2658,8 @@ async function connectTab(
   }
 }
 
-function setTabConnecting(
-  tabId: number,
-  options?: { groupTitle?: string; groupKey?: string; groupColor?: chrome.tabGroups.ColorEnum },
-): void {
+function setTabConnecting(tabId: number, options?: TabGroup): void {
+  if (options) rememberTabGroup(tabId, options)
   store.setState((state) => {
     const newTabs = new Map(state.tabs)
     const existing = newTabs.get(tabId)
@@ -2684,6 +2817,13 @@ async function announceConnectedTabs({
         { tabId },
         'Target.getTargetInfo',
       )) as Protocol.Target.GetTargetInfoResponse
+      const current = store.getState().tabs.get(tabId)
+      if (current?.state !== 'connected' || current.sessionId !== tab.sessionId) continue
+      const origin = browserEnrollment?.tabs.get(tabId)
+      if (origin && !isBrowserTabUrl(result.targetInfo.url, origin)) {
+        void dropBrowserTab(tabId)
+        continue
+      }
       send({
         method: 'forwardCDPEvent',
         params: {
@@ -2693,7 +2833,7 @@ async function announceConnectedTabs({
             targetInfo: { ...result.targetInfo, attached: true },
             waitingForDebugger: false,
           },
-          ownerKey: tab.groupKey,
+          ownerKey: current.groupKey,
         },
       })
     } catch (error) {
@@ -2793,6 +2933,12 @@ async function startRemoteControl(
   if (remoteTunnel) {
     setRemoteStateInAllTabs(true)
     return { url: remoteTunnel.tunnel.url, started: false, id: remoteTunnel.tunnelId }
+  }
+  // A legacy share uses the attached-tab inventory. Revoke settings-only
+  // access before starting it so a current-tab share cannot inherit that grant.
+  if (browserEnrollment) {
+    await connectionManager.disconnectFromSettings({ browserOnly: true })
+    if (browserEnrollment || connectionManager.changingLocalAccess) throw new Error('Sharing transition in progress')
   }
 
   const tunnelId = options.tunnelId || generateTunnelId()
@@ -3084,6 +3230,106 @@ function isRestrictedUrl(url: string | undefined): boolean {
   return restrictedPrefixes.some((prefix) => url.startsWith(prefix))
 }
 
+function isBrowserTabUrl(url: string | undefined, origin: BrowserTabOrigin): boolean {
+  // Chrome can withhold the URL entirely under the production permissions.
+  // Accept a blank bootstrap page only when Playwriter knows who opened it.
+  if (url === 'about:blank') return origin === 'created'
+  if (!url || !URL.canParse(url)) return false
+  const { protocol, hostname } = new URL(url)
+  const host = hostname.replace(/\.$/, '')
+  return (
+    (protocol === 'http:' || protocol === 'https:') &&
+    host !== 'chrome.google.com' &&
+    host !== 'chromewebstore.google.com'
+  )
+}
+
+function isUngroupedBrowserTab(tabId: number, tab: TabInfo): boolean {
+  return browserEnrollment?.tabs.get(tabId) === 'discovered' && !tab.groupKey
+}
+
+const browserDetaches = new Map<number, Promise<void>>()
+
+function dropBrowserTab(tabId: number): Promise<void> | undefined {
+  const tab = store.getState().tabs.get(tabId)
+  if (!tab) return browserDetaches.get(tabId)
+  rememberTabGroup(tabId, tab)
+  const detach = detachTab(tabId, tab.state === 'connected')?.finally(() => browserDetaches.delete(tabId))
+  if (detach) browserDetaches.set(tabId, detach)
+  return detach
+}
+
+function detachBrowserTabs(enrollment: BrowserEnrollment | undefined) {
+  return Promise.allSettled(
+    [...(enrollment?.tabs.keys() ?? [])].flatMap((tabId) => [dropBrowserTab(tabId), inFlightTabAttaches.get(tabId)]),
+  )
+}
+
+async function reconcileBrowserTab(tabId: number): Promise<void> {
+  const enrollment = browserEnrollment
+  if (!enrollment || connectionManager.ws?.readyState !== WebSocket.OPEN) return
+  try {
+    await debuggerReset
+    const tab = await chrome.tabs.get(tabId)
+    const win = await chrome.windows.get(tab.windowId)
+    if (enrollment !== browserEnrollment || connectionManager.ws?.readyState !== WebSocket.OPEN) return
+    const currentTabs = store.getState().tabs
+    const current = currentTabs.get(tabId)
+    const sourceId = popupSourceTabMap.get(tabId) ?? tab.openerTabId
+    const source = sourceId === undefined ? undefined : (currentTabs.get(sourceId) ?? ownedTabGroups.get(sourceId))
+    const group = ownedTabGroups.get(tabId) ?? (source?.groupKey ? source : undefined)
+    const origin = enrollment.tabs.get(tabId) ?? (group?.groupKey ? 'created' : 'discovered')
+    if (
+      tab.incognito ||
+      win.incognito ||
+      win.type !== 'normal' ||
+      (!isBrowserTabUrl(tab.url, origin) && !(tab.url === undefined && origin === 'created' && current)) ||
+      (tab.pendingUrl && !isBrowserTabUrl(tab.pendingUrl, origin))
+    ) {
+      if (enrollment.tabs.has(tabId)) await dropBrowserTab(tabId)
+      return
+    }
+    if (current) return
+    if (pendingRelayTabCreates > 0) {
+      deferredBrowserTabs.add(tabId)
+      return
+    }
+    const inFlight = inFlightTabAttaches.get(tabId) ?? browserDetaches.get(tabId) ?? tabReattaches.get(tabId)
+    if (inFlight) {
+      await Promise.allSettled([inFlight])
+      if (enrollment === browserEnrollment) void reconcileBrowserTab(tabId)
+      return
+    }
+    enrollment.tabs.set(tabId, origin)
+    setTabConnecting(tabId, group)
+    try {
+      await attachTab(tabId)
+    } catch (error) {
+      if (enrollment === browserEnrollment) await dropBrowserTab(tabId)
+      logger.debug('Could not enroll browser tab:', tabId, error)
+    }
+  } catch (error) {
+    logger.debug('Could not check browser tab:', tabId, error)
+  }
+}
+
+async function enrollBrowserTabs(): Promise<void> {
+  const enrollment = browserEnrollment
+  if (!enrollment) return
+  try {
+    const tabs = await chrome.tabs.query({ windowType: 'normal' })
+    if (enrollment !== browserEnrollment) return
+    await Promise.all(tabs.map((tab) => (tab.id === undefined ? undefined : reconcileBrowserTab(tab.id))))
+  } catch (error) {
+    logger.debug('Could not enumerate browser tabs:', error)
+  }
+}
+
+function excludeBrowserNavigation(tabId: number, url: string): void {
+  const origin = browserEnrollment?.tabs.get(tabId)
+  if (origin && !isBrowserTabUrl(url, origin)) void dropBrowserTab(tabId)
+}
+
 /**
  * Error for a URL a CDP client may not open with Target.createTarget or Page.navigate, or null.
  * Our extension pages would give the client extension privileges that outlive Stop sharing.
@@ -3194,6 +3440,9 @@ async function updateIcons(): Promise<void> {
     const title = (() => {
       if (connectionState === 'extension-replaced' && errorText) return errorText
       if (tabInfo?.errorText) return tabInfo.errorText
+      if (tabId !== undefined && tabInfo?.state === 'connected' && browserEnrollment?.tabs.has(tabId)) {
+        return 'Connected through settings - Click to also connect this tab'
+      }
       return iconConfig.title
     })()
 
@@ -3213,6 +3462,9 @@ async function updateIcons(): Promise<void> {
 
 async function onTabRemoved(tabId: number): Promise<void> {
   popupSourceTabMap.delete(tabId)
+  browserEnrollment?.tabs.delete(tabId)
+  deferredBrowserTabs.delete(tabId)
+  if (ownedTabGroups.delete(tabId)) saveOwnedTabGroups()
   forgetRemoteTab(tabId)
   const { tabs } = store.getState()
   if (!tabs.has(tabId)) return
@@ -3222,6 +3474,7 @@ async function onTabRemoved(tabId: number): Promise<void> {
 
 async function onTabActivated(activeInfo: chrome.tabs.TabActiveInfo): Promise<void> {
   store.setState({ currentTabId: activeInfo.tabId, preferredWindowId: activeInfo.windowId })
+  void reconcileBrowserTab(activeInfo.tabId)
 }
 
 const TUTORIAL_PAGE_PATH = 'src/tutorial.html'
@@ -3272,6 +3525,14 @@ async function onActionClicked(tab: chrome.tabs.Tab): Promise<void> {
 
   const { tabs, connectionState } = store.getState()
   const tabInfo = tabs.get(tab.id)
+  const enrollment = browserEnrollment
+  if (tabInfo?.state === 'connected' && enrollment?.tabs.has(tab.id)) {
+    if ((await connectionManager.allowFromTab()) && enrollment === browserEnrollment) {
+      enrollment.tabs.delete(tab.id)
+      tabGroupQueue = tabGroupQueue.then(syncTabGroup)
+    }
+    return
+  }
 
   // If another Playwriter extension took over, clear error state and try to reconnect this tab
   if (connectionState === 'extension-replaced') {
@@ -3296,6 +3557,7 @@ async function onActionClicked(tab: chrome.tabs.Tab): Promise<void> {
   if (tabInfo?.state === 'connected') {
     await disconnectTab(tab.id)
   } else if (await connectionManager.allowFromTab()) {
+    browserEnrollment?.tabs.delete(tab.id)
     await connectTab(tab.id)
   }
 }
@@ -3306,7 +3568,8 @@ chrome.debugger.onEvent.addListener(onDebuggerEvent)
 chrome.debugger.onDetach.addListener(onDebuggerDetach)
 
 // resetDebugger detaches everything, so remote tabs must be restored after it.
-void resetDebugger()
+const debuggerReset = resetDebugger().catch((error) => logger.debug('Could not reset browser debuggers:', error))
+void debuggerReset
   .then(() => {
     return restoreRemoteTunnelAfterRestart()
   })
@@ -3771,9 +4034,30 @@ checkMemory()
 
 chrome.tabs.onRemoved.addListener(onTabRemoved)
 chrome.tabs.onActivated.addListener(onTabActivated)
+chrome.tabs.onCreated.addListener((tab) => {
+  if (tab.id !== undefined) void reconcileBrowserTab(tab.id)
+})
+chrome.tabs.onAttached.addListener((tabId) => void reconcileBrowserTab(tabId))
+chrome.tabs.onReplaced.addListener((tabId, removedTabId) => {
+  const group = store.getState().tabs.get(removedTabId) ?? ownedTabGroups.get(removedTabId)
+  if (group) rememberTabGroup(tabId, group)
+  void onTabRemoved(removedTabId)
+  void reconcileBrowserTab(tabId)
+})
+chrome.webNavigation.onBeforeNavigate.addListener(({ tabId, frameId, url }) => {
+  if (frameId === 0) excludeBrowserNavigation(tabId, url)
+})
+chrome.webNavigation.onCommitted.addListener(({ tabId, frameId, url }) => {
+  if (frameId !== 0) return
+  excludeBrowserNavigation(tabId, url)
+  void reconcileBrowserTab(tabId)
+})
 chrome.action.onClicked.addListener(onActionClicked)
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   void updateIcons()
+  if (changeInfo.url !== undefined || changeInfo.status !== undefined) {
+    void reconcileBrowserTab(tabId)
+  }
   // Chrome 155 can create child tabs inside the group without a later groupId change.
   // Recorded events: https://github.com/remorses/playwriter/issues/133#issuecomment-6278536708
   const isUntrackedGroupedTabLoading =
@@ -3807,8 +4091,13 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
         const { tabs } = store.getState()
         const currentGroupId = await readCurrentGroupId()
         const currentGroup = managedGroups.find((g) => g.id === currentGroupId)
+        const tabInfo = store.getState().tabs.get(tabId)
+        if (browserEnrollment && !tabInfo) {
+          void reconcileBrowserTab(tabId)
+          return
+        }
+        if (tabInfo && isUngroupedBrowserTab(tabId, tabInfo)) return
         if (currentGroup) {
-          const tabInfo = tabs.get(tabId)
           if (!tabInfo && !isRestrictedUrl(tab.url)) {
             // Chrome puts window.open / target=_blank tabs into the opener's group. Those
             // popups belong to the opener's session, so they inherit its ownership key.
@@ -3841,7 +4130,6 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
           return
         }
 
-        const tabInfo = tabs.get(tabId)
         if (
           !shouldDisconnectAfterTabGroupChange({
             currentGroupId,
@@ -3898,10 +4186,13 @@ const popupSourceTabMap = new Map<number, number>()
 
 chrome.webNavigation.onCreatedNavigationTarget.addListener((details) => {
   popupSourceTabMap.set(details.tabId, details.sourceTabId)
+  const source = store.getState().tabs.get(details.sourceTabId) ?? ownedTabGroups.get(details.sourceTabId)
+  if (source) rememberTabGroup(details.tabId, source)
   setTimeout(() => {
     popupSourceTabMap.delete(details.tabId)
   }, 10000)
   void maybeAttachRemoteChildTab(details)
+  void reconcileBrowserTab(details.tabId)
 })
 
 // While sharing, window.open / target=_blank tabs opened FROM a remote-owned tab
@@ -3979,7 +4270,9 @@ chrome.windows.onCreated.addListener(async (popupWindow) => {
     let sourceTabId: number | undefined
     for (const tabId of tabIds) {
       const candidate = popupSourceTabMap.get(tabId)
-      if (candidate !== undefined && connectedTabs.has(candidate)) {
+      if (candidate === undefined) continue
+      const source = connectedTabs.get(candidate)
+      if (source && !isUngroupedBrowserTab(candidate, source)) {
         sourceTabId = candidate
         break
       }
@@ -4027,6 +4320,10 @@ chrome.windows.onCreated.addListener(async (popupWindow) => {
       remoteTunnel && isRemoteOwnedTab({ runtime: remoteTunnel, tabId: sourceTabId }) ? remoteTunnel : null
     for (const tabId of tabIds) {
       if (connectedTabs.has(tabId)) continue
+      if (browserEnrollment) {
+        void reconcileBrowserTab(tabId)
+        continue
+      }
       const attach = () => {
         return connectTab(tabId, {
           groupTitle: sourceTabInfo?.groupTitle,

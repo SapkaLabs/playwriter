@@ -95,19 +95,39 @@ async function main() {
   // exactly its dependency graph and sums. The local replace selects the checked pin.
   const launcher = join(cache, 'launcher')
   await mkdir(launcher, { recursive: true })
+  await cp(
+    new URL('../playwriter/src/tailcat-tunnel/map-cases.json', import.meta.url),
+    join(launcher, 'map-cases.json'),
+  )
   const launcherSource = await readFile(new URL('../playwriter/src/tailcat-tunnel/launcher/main.go', import.meta.url))
   const upstreamMod = await readFile(join(source, 'go.mod'), 'utf8')
   await writeFile(join(launcher, 'main.go'), launcherSource)
+  await cp(
+    new URL('../playwriter/src/tailcat-tunnel/launcher/main_test.go', import.meta.url),
+    join(launcher, 'main_test.go'),
+  )
   await writeFile(
     join(launcher, 'go.mod'),
-    upstreamMod.replace('module github.com/tailscale/tailcat', 'module playwriter.local/tailcat-launcher') +
+    upstreamMod.replace('module github.com/tailscale/tailcat', 'module playwriter.local/tailcat-runtime') +
       '\nrequire github.com/tailscale/tailcat v0.0.0\nreplace github.com/tailscale/tailcat => ' +
       JSON.stringify(source.replaceAll('\\', '/')) +
       '\n',
   )
   await cp(join(source, 'go.sum'), join(launcher, 'go.sum'))
+  await mkdir(join(launcher, 'policy'), { recursive: true })
+  const policySource = await readFile(new URL('../playwriter/src/tailcat-tunnel/runtime/policy.go', import.meta.url))
+  await writeFile(join(launcher, 'policy/policy.go'), policySource)
   const launcherName = process.platform === 'win32' ? 'tailcat-launcher.exe' : 'tailcat-launcher'
+  await run(go, ['test', '-mod=readonly', '-tags', tags, '.'], launcher, env)
   await run(go, ['build', '-mod=readonly', '-tags', tags, '-o', join(out, launcherName), '.'], launcher, env)
+  const wasmSource = await readFile(new URL('../playwriter/src/tailcat-tunnel/wasm/main_js.go', import.meta.url))
+  await mkdir(join(launcher, 'wasm'), { recursive: true })
+  await writeFile(join(launcher, 'wasm/main_js.go'), wasmSource)
+  await run(go, ['build', '-mod=readonly', '-tags', tags, '-o', join(out, 'main.wasm'), './wasm'], launcher, {
+    ...env,
+    GOOS: 'js',
+    GOARCH: 'wasm',
+  })
   await mkdir(join(out, 'notices'), { recursive: true })
   await cp(join(source, 'LICENSE'), join(out, 'notices', 'tailcat-LICENSE'))
   const goroot = await run(go, ['env', 'GOROOT'], source, env)
@@ -133,10 +153,12 @@ async function main() {
         platform: process.platform,
         architecture: process.arch,
         nativeTags: tags,
-        wasmBuilder: 'go run ./cmd/tailcat-webdist',
+        wasmBuilder: 'Playwriter supplied-map bridge with unchanged pinned Tailcat module',
+        wasmBridge: { sha256: sha256(wasmSource) },
+        mapPolicy: { sha256: sha256(policySource) },
         launcher: { source: 'playwriter/src/tailcat-tunnel/launcher/main.go', sha256: sha256(launcherSource) },
         goflags: env.GOFLAGS,
-        publicMap: 'https://tailcat.dev/derpmap.json',
+        mapPolicyVersion: 2,
         dependencies,
         files: await inventory(out),
       },

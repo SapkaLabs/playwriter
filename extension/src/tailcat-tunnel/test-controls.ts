@@ -9,6 +9,25 @@ const names = new Set([
   'preface',
   'transfer',
 ])
+const mapFixtures = new Map<string, { body: string; status?: number; hang?: boolean }>()
+const mapRequests: string[] = []
+export function setTailcatMapFixture(url: string, fixture: { body: string; status?: number; hang?: boolean }): void {
+  if (!import.meta.env.TESTING || !url.startsWith('https://') || fixture.body.length > 2 * 1024 * 1024)
+    throw Error('Invalid test map')
+  mapFixtures.set(url, fixture)
+}
+export function tailcatMapRequests(): string[] {
+  return [...mapRequests]
+}
+export const tailcatMapFetch: typeof fetch = async (url, init) => {
+  mapRequests.push(String(url))
+  if (mapRequests.length > 128) mapRequests.shift()
+  const fixture = mapFixtures.get(String(url))
+  if (!fixture) return fetch(url, init)
+  return new Response(fixture.hang ? new ReadableStream({ start() {} }) : fixture.body, {
+    status: fixture.status ?? 200,
+  })
+}
 const barriers = new Map<string, { promise: Promise<void>; release(): void; blocked: number; method?: string }>()
 export function armTailcatBarrier(name: string, method?: string): void {
   if (!import.meta.env.TESTING || !names.has(name) || barriers.has(name)) throw Error('Invalid test barrier')

@@ -32,6 +32,16 @@ import { handleGhostBrowserCommand, type GhostBrowserCommandParams } from 'playw
 import { RemoteTunnel } from './remote-tunnel'
 import { TailcatTunnel } from './tailcat-tunnel/index'
 import {
+  ProfileStore,
+  findProfile,
+  ConfigurationError,
+  configurationError,
+  type ServerProfile,
+  type ProfileMutation,
+} from 'playwriter/src/tailcat-tunnel/config'
+import { fetchDERPMap } from 'playwriter/src/tailcat-tunnel/map'
+import { setTailcatMapFixture, tailcatMapRequests } from './tailcat-tunnel/test-controls'
+import {
   armTailcatBarrier,
   waitTailcatBarrier,
   releaseTailcatBarrier,
@@ -318,6 +328,7 @@ let autoAttachParams: Protocol.Target.SetAutoAttachRequest | null = null
 type RemoteTunnelRuntime = {
   tunnel: RemoteTunnel | TailcatTunnel
   tailcat?: boolean
+  profile?: ServerProfile
   tunnelId: string
   anchorTabId: number
   /** Tabs attached because of the remote. Detached (left open) on stop. */
@@ -338,6 +349,43 @@ async function withoutTailcatLogs<T>(operation: () => Promise<T>): Promise<T> {
   }
 }
 let tailcatFailure: string | null = null
+const tailcatProfiles = new ProfileStore({
+  read: async () => (await chrome.storage.local.get('tailcatProfiles')).tailcatProfiles,
+  write: async (value) => {
+    await chrome.storage.local.set({ tailcatProfiles: value })
+  },
+})
+let tailcatEpoch = 0
+let tailcatStarting = false
+let tailcatChanging = false
+let tailcatStopping = false
+let tailcatCleanupFailed = false
+let tailcatDisposal: Promise<void> = Promise.resolve()
+let tailcatStartupTimer: ReturnType<typeof setTimeout> | undefined
+
+async function changeTailcatProfile(change: ProfileMutation, stopActive: boolean): Promise<unknown> {
+  if (tailcatChanging || tailcatStopping || tailcatCleanupFailed)
+    throw new ConfigurationError('CONFIG_BUSY', 'Wait for sharing cleanup or reload the extension')
+  tailcatChanging = true
+  try {
+    const current = await tailcatProfiles.read()
+    // Validate all form fields/revisions before revoking an active share.
+    await new ProfileStore({ read: async () => current, write: async () => {} }).update(change)
+    const changesActive =
+      change.action === 'select' ||
+      (remoteTunnel?.profile?.id === change.id && change.action !== 'add') ||
+      tailcatStarting
+    if (changesActive && (remoteTunnel || tailcatStarting)) {
+      if (!stopActive || (remoteTunnel && !remoteTunnel.tailcat))
+        throw new ConfigurationError('SHARE_ACTIVE', 'Stop sharing before changing this server')
+      stopRemoteControl()
+      await tailcatDisposal
+    }
+    return await tailcatProfiles.update(change)
+  } finally {
+    tailcatChanging = false
+  }
+}
 
 /**
  * A message sink for relay-bound responses: the local relay, or a tunneled relay
@@ -2542,8 +2590,16 @@ async function sendRemoteHelloAndTargets(conn: { send(message: any): void }): Pr
 
 async function startRemoteControl(
   anchorTabId: number,
-  options: { tunnelId?: string; remoteTabIds?: number[]; tailcat?: boolean } = {},
+  options: {
+    tunnelId?: string
+    remoteTabIds?: number[]
+    tailcat?: boolean
+    profile?: ServerProfile
+    deadline?: number
+  } = {},
 ): Promise<{ url: string; started: boolean; id: string }> {
+  if (tailcatStopping || tailcatCleanupFailed || (!options.tailcat && (tailcatStarting || tailcatChanging)))
+    throw new Error('Sharing transition in progress')
   if (remoteTunnel) {
     setRemoteStateInAllTabs(true)
     return { url: remoteTunnel.tunnel.url, started: false, id: remoteTunnel.tunnelId }
@@ -2552,6 +2608,8 @@ async function startRemoteControl(
   const tunnelId = options.tunnelId || generateTunnelId()
   const Tunnel = options.tailcat ? TailcatTunnel : RemoteTunnel
   const tunnel = new Tunnel({
+    profile: options.profile,
+    deadline: options.deadline,
     ensureOffscreen: ensureOffscreenDocument,
     onFatal: (reason: string) => {
       if (remoteTunnel?.tunnel === tunnel) {
@@ -2563,10 +2621,13 @@ async function startRemoteControl(
     baseDomain: REMOTE_TUNNEL_BASE_DOMAIN,
     logger,
     onStatusChange: (status, detail) => {
+      if (options.tailcat && status === 'online') clearTimeout(tailcatStartupTimer)
       if (remoteTunnel?.tunnel === tunnel) {
         remoteTunnel.status = options.tailcat
           ? status === 'online'
-            ? 'ready'
+            ? remoteTunnel.status === 'connected'
+              ? 'connected'
+              : 'ready'
             : status === 'error'
               ? 'disconnected'
               : 'starting'
@@ -2625,6 +2686,7 @@ async function startRemoteControl(
     remoteTabIds: new Set(),
     status: options.tailcat ? 'starting' : 'connecting',
     tailcat: options.tailcat,
+    profile: options.profile,
   }
   // Set before attaching so the maintain loop and relay-close handling keep
   // these tabs 'connected' without a local relay: the tunnel is the consumer.
@@ -2693,8 +2755,12 @@ async function startRemoteControl(
 // remote caused to attach are detached and left open; other tabs stay attached
 // for the local relay.
 function stopRemoteControl(): boolean {
+  ++tailcatEpoch
+  tailcatStarting = false
+  clearTimeout(tailcatStartupTimer)
   const runtime = remoteTunnel
   if (runtime === null) {
+    updateSharingMenus()
     return false
   }
   remoteTunnel = null
@@ -2702,6 +2768,21 @@ function stopRemoteControl(): boolean {
   setRemoteStateInAllTabs(false)
   updateSharingMenus()
   runtime.tunnel.close()
+  if (runtime.tunnel instanceof TailcatTunnel) {
+    tailcatStopping = true
+    tailcatDisposal = runtime.tunnel.disposed.then(
+      () => {
+        tailcatStopping = false
+      },
+      () => {
+        tailcatStopping = false
+        tailcatCleanupFailed = true
+        tailcatFailure = 'Transport cleanup failed; reload the extension'
+        throw new ConfigurationError('TRANSPORT_UNAVAILABLE', 'Reload the extension to finish cleanup')
+      },
+    )
+    void tailcatDisposal.catch(() => {})
+  }
   persistRemoteTunnel()
   for (const tabId of runtime.remoteTabIds) {
     detachTab(tabId, true)
@@ -3150,8 +3231,8 @@ function updateContextMenuVisibility(): void {
 }
 
 function updateSharingMenus(): void {
-  const sharing = remoteTunnel !== null
-  const tailcat = Boolean(remoteTunnel?.tailcat)
+  const sharing = remoteTunnel !== null || tailcatStarting
+  const tailcat = Boolean(remoteTunnel?.tailcat) || tailcatStarting
   updateMenus([
     [MENU.separator, { visible: sharing }],
     [MENU.copyRemotePrompt, { visible: sharing && !tailcat }],
@@ -3160,7 +3241,7 @@ function updateSharingMenus(): void {
       {
         visible: sharing,
         title: tailcat
-          ? 'Copy connection information for public DERP'
+          ? 'Copy connection information for selected DERP'
           : 'Copy remote id (secret, gives full browser access)',
       },
     ],
@@ -4008,6 +4089,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return false
     if (import.meta.env.TESTING && message.action === 'tailcatTest') {
       try {
+        if (message.command === 'mapFixture') {
+          setTailcatMapFixture(message.url, message.fixture)
+          sendResponse({ ok: true })
+          return false
+        }
+        if (message.command === 'mapRequests') {
+          sendResponse(tailcatMapRequests())
+          return false
+        }
         if (message.command === 'barrierArm') {
           armTailcatBarrier(message.name, message.method)
           sendResponse({ armed: true })
@@ -4028,7 +4118,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     }
     if (message.action === 'tailcatStop') {
-      if (remoteTunnel?.tailcat) stopRemoteControl()
+      if (remoteTunnel?.tailcat || tailcatStarting) stopRemoteControl()
+      else if (!remoteTunnel && !tailcatCleanupFailed) tailcatFailure = null
       sendResponse({})
       return false
     }
@@ -4036,16 +4127,53 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({
         status: !__PLAYWRITER_TAILCAT_ENABLED__
           ? 'unavailable'
-          : remoteTunnel?.tailcat
-            ? remoteTunnel.status
-            : remoteTunnel
-              ? 'another share is active'
-              : 'stopped',
-        active: Boolean(remoteTunnel?.tailcat),
-        error: !__PLAYWRITER_TAILCAT_ENABLED__ ? 'Public DERP assets are not included in this build' : tailcatFailure,
+          : tailcatStopping
+            ? 'stopping'
+            : tailcatStarting
+              ? 'starting'
+              : remoteTunnel?.tailcat
+                ? remoteTunnel.status
+                : remoteTunnel
+                  ? 'another share is active'
+                  : tailcatFailure
+                    ? 'failed'
+                    : 'stopped',
+        active: Boolean(remoteTunnel?.tailcat) || tailcatStarting,
+        profileId: remoteTunnel?.profile?.id,
+        error: !__PLAYWRITER_TAILCAT_ENABLED__ ? 'DERP assets are not included in this build' : tailcatFailure,
         descriptor: remoteTunnel?.tailcat ? remoteTunnel.tunnel.url : '',
       })
       return false
+    }
+    if (message.action === 'tailcatProfiles') {
+      void tailcatProfiles.read().then(
+        (profiles) => sendResponse({ profiles }),
+        (error) => sendResponse({ error: configurationError(error) }),
+      )
+      return true
+    }
+    if (message.action === 'tailcatProfileUpdate') {
+      void changeTailcatProfile(message.change, message.stopActive === true).then(
+        (profiles) => sendResponse({ profiles }),
+        (error) => sendResponse({ error: configurationError(error) }),
+      )
+      return true
+    }
+    if (message.action === 'tailcatValidate') {
+      void tailcatProfiles
+        .read()
+        .then((profiles) => fetchDERPMap(findProfile(profiles, message.profileId).derpMapURL))
+        .then(
+          (map) =>
+            sendResponse({
+              regions: Object.values(map.map.Regions).map((r) => ({
+                id: r.RegionID,
+                nodes: r.Nodes.map((n) => `${n.HostName}:${n.DERPPort}`),
+              })),
+            }),
+          (error) => sendResponse({ error: configurationError(error) }),
+        )
+      return true
     }
     if (import.meta.env.TESTING && message.action === 'tailcatTest' && remoteTunnel?.tunnel instanceof TailcatTunnel) {
       const tunnel = remoteTunnel.tunnel
@@ -4068,16 +4196,47 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     if (message.action === 'tailcatStart') {
       if (!__PLAYWRITER_TAILCAT_ENABLED__) {
-        sendResponse({ error: 'Public DERP assets are not included in this build' })
+        sendResponse({ error: 'DERP assets are not included in this build' })
         return false
       }
-      if (remoteTunnel || !Number.isSafeInteger(message.tabId)) {
+      if (
+        remoteTunnel ||
+        tailcatStarting ||
+        tailcatChanging ||
+        tailcatStopping ||
+        tailcatCleanupFailed ||
+        !Number.isSafeInteger(message.tabId)
+      ) {
         sendResponse({ error: 'Sharing is already active or no tab is selected' })
         return false
       }
-      void withoutTailcatLogs(() => startRemoteControl(message.tabId, { tailcat: true })).then(
-        () => sendResponse({}),
-        () => sendResponse({ error: 'Start failed; sharing stopped' }),
+      tailcatStarting = true
+      tailcatFailure = null
+      const epoch = ++tailcatEpoch
+      const deadline = Date.now() + 60_000
+      updateSharingMenus()
+      tailcatStartupTimer = setTimeout(() => {
+        if (epoch === tailcatEpoch) {
+          stopRemoteControl()
+          tailcatFailure = 'STARTUP_TIMEOUT: sharing stopped'
+        }
+      }, 60_000)
+      void withoutTailcatLogs(async () => {
+        const profile = findProfile(await tailcatProfiles.read())
+        if (epoch !== tailcatEpoch) throw new ConfigurationError('SHARE_REVOKED', 'Sharing was stopped')
+        await startRemoteControl(message.tabId, { tailcat: true, profile, deadline })
+      }).then(
+        () => {
+          if (epoch === tailcatEpoch) tailcatStarting = false
+          sendResponse({})
+        },
+        (error) => {
+          if (epoch === tailcatEpoch) {
+            stopRemoteControl()
+            tailcatFailure = configurationError(error)
+          }
+          sendResponse({ error: configurationError(error) })
+        },
       )
       return true
     }

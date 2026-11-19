@@ -5,6 +5,7 @@ import { cp, mkdtemp, rm, writeFile, mkdir, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { setupTailcatTest, tailcatTestsEnabled } from './test-utils.js'
+import { withProfileFile } from './profile-file.js'
 
 it.runIf(tailcatTestsEnabled && process.env.PLAYWRITER_TAILCAT_DELIVERY === '1')(
   'runs a relocated production developer bundle through public DERP and disconnects it',
@@ -54,10 +55,25 @@ it.runIf(tailcatTestsEnabled && process.env.PLAYWRITER_TAILCAT_DELIVERY === '1')
       ...process.env,
       PLAYWRITER_TELEMETRY: '0',
       PLAYWRITER_TAILCAT_REGISTRY: join(test.profile, 'registry'),
+      PLAYWRITER_TAILCAT_CONFIG: join(test.profile, 'profiles.json'),
+      TAILCAT_DERPMAP_URL: 'https://poison.example/map',
     }
     try {
+      // Descriptor-only connect must ignore an unrelated saved selection and
+      // inherited Tailcat URL. This exercises the compiled entry point.
+      await withProfileFile(env.PLAYWRITER_TAILCAT_CONFIG, async (store) => {
+        const saved = await store.read()
+        await store.update({
+          action: 'edit',
+          id: saved.selectedProfileId,
+          name: 'Unrelated',
+          derpMapURL: 'https://unrelated.example/map',
+          expectedRevision: saved.revision,
+        })
+      })
       const descriptor = await test.start(),
         descriptorPath = join(test.profile, 'descriptor.json')
+      expect(descriptor.v).toBe(2)
       await test.control.getByRole('button', { name: 'Copy connection information' }).click()
       await writeFile(descriptorPath, JSON.stringify(descriptor), { mode: 0o600 })
       child = spawn(

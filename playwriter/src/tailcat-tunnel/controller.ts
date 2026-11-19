@@ -1,36 +1,25 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { spawn, execFile, type ChildProcess } from 'node:child_process'
 import { createServer } from 'node:http'
-import { mkdir } from 'node:fs/promises'
+import { mkdir, writeFile, unlink } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { WebSocket, WebSocketServer } from 'ws'
-import { FramedStream, PendingDataBudget, MAX_CHUNK, PUBLIC_DERP_MAP, type FrameMetadata } from './protocol.js'
+import { FramedStream, PendingDataBudget, MAX_CHUNK, type FrameMetadata } from './protocol.js'
+import { descriptorConfiguration, validateSessionHello, type Descriptor } from './descriptor.js'
+import { fetchDERPMap } from './map.js'
+import { ConfigurationError } from './config.js'
 
 const exec = promisify(execFile)
-export type Descriptor = {
-  v: 1
-  transport: 'playwriter-tailcat'
-  addr: string
-  port: 1
-  relayMode: 'public'
-  derpMapURL: string
-}
+export type { Descriptor } from './descriptor.js'
 
-async function validateDescriptor(value: unknown, nativePath: string): Promise<Descriptor> {
-  const descriptor = value as Descriptor
-  if (
-    !descriptor ||
-    descriptor.v !== 1 ||
-    descriptor.transport !== 'playwriter-tailcat' ||
-    descriptor.port !== 1 ||
-    descriptor.relayMode !== 'public' ||
-    descriptor.derpMapURL !== PUBLIC_DERP_MAP ||
-    typeof descriptor.addr !== 'string' ||
-    !/^tc[A-Za-z0-9_-]{20,8192}$/.test(descriptor.addr)
-  )
-    throw new Error('Unsupported public Tailcat descriptor')
+async function validateDescriptor(
+  value: unknown,
+  nativePath: string,
+  assertedURL?: string,
+): Promise<{ descriptor: Descriptor; regionId: number }> {
+  const descriptor = descriptorConfiguration(value, assertedURL)
   let parsed: { PresharedKey?: string; ServerPublic?: string; RegionID?: number; Region?: unknown[] }
   try {
     const result = await exec(nativePath, ['parse', descriptor.addr], {
@@ -40,19 +29,24 @@ async function validateDescriptor(value: unknown, nativePath: string): Promise<D
     })
     parsed = JSON.parse(result.stdout)
   } catch {
-    throw new Error('Malformed Tailcat address')
+    throw new ConfigurationError('DESCRIPTOR_INVALID', 'Malformed Tailcat address')
   }
-  // This PoC accepts only short, public map references, never embedded relay destinations.
+  // Short addresses select a region from the validated map, never embedded destinations.
   if (
     !/^psk:[0-9a-f]{64}$/.test(parsed.PresharedKey ?? '') ||
     /^psk:0+$/.test(parsed.PresharedKey ?? '') ||
     !parsed.ServerPublic ||
-    ![301, 302, 303, 304].includes(parsed.RegionID ?? 0) ||
+    !(descriptor.v === 1
+      ? [301, 302, 303, 304].includes(parsed.RegionID ?? 0)
+      : descriptor.regionId === parsed.RegionID) ||
     parsed.Region?.length
   ) {
-    throw new Error('Address requires a nonzero PSK and an approved public DERP region')
+    throw new ConfigurationError(
+      'DESCRIPTOR_INVALID',
+      'Address requires a nonzero PSK, server key and matching configured region',
+    )
   }
-  return descriptor
+  return { descriptor, regionId: parsed.RegionID! }
 }
 
 function ownedChild(module: string, args: string[], env: NodeJS.ProcessEnv): ChildProcess {
@@ -89,11 +83,23 @@ export async function connectTailcat(options: {
   nativePath: string
   stateDirectory: string
   listen?: string
+  assertedMapURL?: string
   onFailure?(message: string): void
   signal?: AbortSignal
   testBeforeWrite?(frame: FrameMetadata): Promise<void>
 }) {
-  const descriptor = await validateDescriptor(options.descriptor, options.nativePath)
+  const startedAt = Date.now()
+  const { descriptor, regionId } = await validateDescriptor(
+    options.descriptor,
+    options.nativePath,
+    options.assertedMapURL,
+  )
+  const configuration = await fetchDERPMap(descriptor.derpMapURL, {
+    signal: options.signal,
+    regionId,
+    expectedHash: descriptor.v === 2 ? descriptor.derpMapSha256 : undefined,
+  })
+  options.signal?.throwIfAborted()
   if (!/^127\.0\.0\.1:(0|[1-9]\d{0,4})$/.test(options.listen ?? '127.0.0.1:0'))
     throw new Error('Listen must be 127.0.0.1:<port>')
   await mkdir(options.stateDirectory, { recursive: true, mode: 0o700 })
@@ -120,6 +126,7 @@ export async function connectTailcat(options: {
   const connectionId = randomBytes(16).toString('hex')
   const path = `/tunnel/${localId}/extension`
   let terminal = false
+  let disposal: Promise<void> = Promise.resolve()
   let sessionId = ''
   let host = ''
   let relay: ChildProcess | undefined
@@ -150,7 +157,13 @@ export async function connectTailcat(options: {
     dirname(options.nativePath),
     process.platform === 'win32' ? 'tailcat-launcher.exe' : 'tailcat-launcher',
   )
-  const native = ownedChild('./native', [launcherPath, descriptor.addr], env)
+  const nativeConfig = join(options.stateDirectory, `transport-${connectionId}.json`)
+  await writeFile(nativeConfig, JSON.stringify({ ...configuration, addr: descriptor.addr }), {
+    mode: 0o600,
+    flag: 'wx',
+  })
+  const native = ownedChild('./native', [launcherPath, nativeConfig], env)
+  let remoteGeneration: number | null = descriptor.v === 1 ? 0 : null
   native.on('message', (message: any) => {
     if (message.nativePid) nativePid = message.nativePid
     if (!terminal && message.stage === 'stream-established') {
@@ -162,7 +175,10 @@ export async function connectTailcat(options: {
       if (trace.length > 512) trace.shift()
     }
   })
-  const startup = setTimeout(() => fail('Native startup timed out (60 s)'), 60_000)
+  const startup = setTimeout(
+    () => fail('Native startup timed out (60 s)'),
+    Math.max(1, 60_000 - (Date.now() - startedAt)),
+  )
   const stream = new FramedStream({
     budget,
     beforeWriteRecord: process.env.PLAYWRITER_TAILCAT_TESTS === '1' ? options.testBeforeWrite : undefined,
@@ -188,6 +204,12 @@ export async function connectTailcat(options: {
     onMessage: async (json) => {
       if (terminal) return
       const message = JSON.parse(json)
+      if (descriptor.v === 2 && message.method === 'hello') {
+        if (remoteGeneration !== null) throw new ConfigurationError('SESSION_MISMATCH', 'Repeated session hello')
+        remoteGeneration = validateSessionHello(descriptor, message.params?.tailcatSession)
+      }
+      if (remoteGeneration === null)
+        throw new ConfigurationError('SESSION_MISMATCH', 'Missing authenticated session hello')
       if (typeof message.id === 'number' && !message.method) {
         clearTimeout(requests.get(message.id))
         requests.delete(message.id)
@@ -209,8 +231,16 @@ export async function connectTailcat(options: {
     void close()
   }
   async function close() {
-    if (terminal) return
+    if (terminal) return disposal
     terminal = true
+    disposal = new Promise<void>((resolve) => {
+      if (native.exitCode !== null) {
+        resolve()
+        return
+      }
+      native.once('exit', () => resolve())
+      setTimeout(resolve, 2200).unref()
+    })
     if (requests.size && !reportedFailure) {
       const message = 'Controller disconnected with dispatched commands; outcome unknown. Re-observe before retrying.'
       failures.push(message)
@@ -235,9 +265,11 @@ export async function connectTailcat(options: {
     setTimeout(() => {
       native.kill()
       relay?.kill()
-    }, 1500).unref()
+    }, 2000).unref()
     wss.close()
     server.close()
+    await unlink(nativeConfig).catch(() => {})
+    await disposal
   }
   options.signal?.addEventListener(
     'abort',
@@ -310,6 +342,10 @@ export async function connectTailcat(options: {
         ws.on('error', () => fail('Relay adapter socket failed'))
         ws.on('message', (data, binary) => {
           if (terminal) return
+          if (remoteGeneration === null) {
+            fail('SESSION_MISMATCH: session not verified')
+            return
+          }
           if (binary || !Buffer.isBuffer(data)) {
             fail('Invalid or overflowing relay frame')
             return
@@ -373,6 +409,18 @@ export async function connectTailcat(options: {
     }
   } catch (error) {
     await close()
-    throw new Error(failures[0] || (error instanceof Error ? error.message : 'Tailcat connect failed'))
+    if (error instanceof ConfigurationError) throw error
+    // Export only known local diagnostics, never native library error text.
+    const failure = failures[0] ?? ''
+    if (failure.startsWith('SESSION_MISMATCH:'))
+      throw new ConfigurationError('SESSION_MISMATCH', 'Authenticated session does not match connection information')
+    if (failure.includes('Preface exchange timed out'))
+      throw new ConfigurationError('HANDSHAKE_TIMEOUT', 'Preface exchange timed out; reconnect manually')
+    if (failure.includes('startup timed out'))
+      throw new ConfigurationError('STARTUP_TIMEOUT', 'Selected server startup timed out; retry explicitly')
+    throw new ConfigurationError(
+      'CONTROLLER_UNAVAILABLE',
+      'Selected peer is unreachable or busy; do not replace an active controller. Retry manually or Stop and Start sharing',
+    )
   }
 }

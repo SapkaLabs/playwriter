@@ -498,6 +498,8 @@ describe('Extension Connection Tests', () => {
 
     await clickRecord()
     await expect.poll(recordingCount).toBe(1)
+    // Relay state can arrive before the toolbar has rendered its Stop button.
+    await expect.poll(toolbarWidth).not.toBe(idleWidth)
     await clickRecord()
     await expect.poll(recordingCount).toBe(0)
 

@@ -1,6 +1,6 @@
 // Pipe supervisor: IPC loss also kills the owned native child on Windows.
 import { spawn } from 'node:child_process'
-const child = spawn(process.argv[2], [process.argv[3]], {
+const child = spawn(process.argv[2], ['--config', process.argv[3]], {
   windowsHide: true,
   stdio: ['pipe', 'pipe', 'pipe'],
 })
@@ -31,12 +31,19 @@ child.on('error', () => {
   process.exit(1)
 })
 child.on('exit', (code) => {
-  process.send?.({ exited: true })
+  if (process.connected) process.send?.({ exited: true })
   process.exit(code ?? 1)
 })
 const close = () => {
-  child.kill()
-  setTimeout(() => process.exit(1), 1000).unref()
+  // EOF lets the owned launcher send TCP FIN so the browser can release its
+  // controller slot. Local authority is already revoked; bound cleanup even
+  // when the remote route is offline.
+  process.stdin.unpipe(child.stdin)
+  child.stdin.end()
+  setTimeout(() => {
+    child.kill()
+    process.exit(1)
+  }, 1500).unref()
 }
 process.on('disconnect', close)
 process.on('SIGINT', close)

@@ -2,23 +2,88 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Playwriter public sharing</title>
+    <title>Playwriter sharing</title>
+    <style>
+      body {
+        font: 15px system-ui;
+        max-width: 760px;
+        margin: 32px auto;
+        padding: 0 20px;
+        color-scheme: light dark;
+      }
+      button,
+      input,
+      select {
+        font: inherit;
+        margin: 6px 6px 6px 0;
+        padding: 7px;
+      }
+      input {
+        width: min(90%, 560px);
+      }
+      fieldset {
+        margin: 16px 0;
+      }
+      label {
+        display: block;
+      }
+      #server-url {
+        overflow-wrap: anywhere;
+      }
+      #error {
+        color: #c43b35;
+      }
+      textarea {
+        width: 95%;
+        height: 100px;
+      }
+    </style>
   </head>
   <body>
-    <h1>Share browser through public DERP</h1>
+    <h1>Share browser</h1>
     <p>
       Start grants control of the selected tab to anyone holding the connection information. Keep it private. Stop
       revokes access locally.
     </p>
+    <label for="server">Server</label
+    ><select id="server"></select>
+    <p id="server-url"></p>
+    <details>
+      <summary>Manage servers</summary>
+      <fieldset>
+        <legend>Saved servers</legend>
+        <label for="manage-server">Manage profile</label
+        ><select id="manage-server"></select>
+        <button id="add" disabled>Add server</button><button id="edit" disabled>Edit server</button
+        ><button id="remove" disabled>Remove server</button><button id="validate" disabled>Validate server</button>
+        <form id="profile-form" hidden>
+          <label>Name <input id="profile-name" maxlength="128" required /></label>
+          <label
+            >DERP map URL <input id="profile-url" type="text" placeholder="https://map.example/map.json" required
+          /></label>
+          <button type="submit">Save server</button><button type="button" id="cancel-edit">Cancel edit</button>
+        </form>
+        <pre id="validation"></pre>
+      </fieldset>
+    </details>
     <label
       >Tab
       <select id="tabs"></select
     ></label>
-    <button id="start">Start sharing</button>
-    <button id="stop" disabled>Stop sharing</button>
+    <button id="start" disabled>Start sharing</button>
+    <button id="stop">Stop sharing</button>
+    <section id="confirm-change" role="alertdialog" aria-labelledby="confirm-text" hidden>
+      <p id="confirm-text"></p>
+      <button id="confirm-action"></button><button id="confirm-cancel">Cancel</button>
+    </section>
     <p role="status">stopped</p>
-    <label hidden>Connection information <textarea id="descriptor" readonly spellcheck="false"></textarea></label>
+    <p id="error" role="alert"></p>
+    <label>Connection information <textarea id="descriptor" readonly spellcheck="false"></textarea></label>
     <button id="copy" disabled>Copy connection information</button>
+    <p>
+      Connection information requires a controller with descriptor v2 support. Keep it private. Selecting a server never
+      starts sharing.
+    </p>
     <script type="module" src="./tailcat-tunnel/share.ts"></script>
   </body>
 </html>

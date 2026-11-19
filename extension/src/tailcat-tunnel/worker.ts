@@ -1,5 +1,6 @@
 // The only browser transport owner. Terminating this dedicated worker destroys keys and netstack.
-import { PUBLIC_DERP_MAP, MAX_CHUNK } from 'playwriter/src/tailcat-tunnel/protocol'
+import { MAX_CHUNK } from 'playwriter/src/tailcat-tunnel/protocol'
+import { freezeMap } from 'playwriter/src/tailcat-tunnel/map'
 
 type Conn = { port: number; read(): Promise<Uint8Array | null>; write(bytes: Uint8Array): Promise<void>; close(): void }
 declare const self: {
@@ -8,7 +9,7 @@ declare const self: {
   Go: new () => { importObject: WebAssembly.Imports; run(instance: WebAssembly.Instance): Promise<void> }
   onTailcatReady: () => void
   tailcatListen(options: {
-    derpMapURL: string
+    configuration: string
     onConnection(conn: Conn): void
   }): Promise<{ addr: string; close(): void }>
 }
@@ -21,13 +22,15 @@ const sockets = new Set<WebSocket>()
 const socketIds = new WeakMap<WebSocket, number>()
 let socketSequence = 0
 let cut = false
-if (import.meta.env.TESTING) {
+// Observe transport availability without changing Tailcat's same-region retry
+// policy. No endpoint or native error text leaves the worker in production.
+{
   const NativeWebSocket = globalThis.WebSocket
   globalThis.WebSocket = class extends NativeWebSocket {
     constructor(url: string | URL, protocols?: string | string[]) {
       const endpoint = new URL(String(url))
       const isDERP = endpoint.pathname === '/derp'
-      if (isDERP && cut) {
+      if (import.meta.env.TESTING && isDERP && cut) {
         self.postMessage({ trace: { stage: 'derp-denied', endpoint: endpoint.origin, at: Date.now() } })
         throw new Error('Test DERP data route is cut')
       }
@@ -36,13 +39,21 @@ if (import.meta.env.TESTING) {
       const socketId = ++socketSequence
       socketIds.set(this, socketId)
       sockets.add(this)
-      self.postMessage({ trace: { stage: 'derp-construct', socketId, endpoint: endpoint.origin, at: Date.now() } })
-      this.addEventListener('open', () =>
-        self.postMessage({ trace: { stage: 'derp-open', socketId, endpoint: endpoint.origin, at: Date.now() } }),
-      )
+      if (import.meta.env.TESTING)
+        self.postMessage({ trace: { stage: 'derp-construct', socketId, endpoint: endpoint.origin, at: Date.now() } })
+      const availability = () =>
+        self.postMessage({ relayAvailable: Array.from(sockets).some((s) => s.readyState === WebSocket.OPEN) })
+      this.addEventListener('open', () => {
+        availability()
+        if (import.meta.env.TESTING)
+          self.postMessage({ trace: { stage: 'derp-open', socketId, endpoint: endpoint.origin, at: Date.now() } })
+      })
+      this.addEventListener('error', availability)
       this.addEventListener('close', () => {
         sockets.delete(this)
-        self.postMessage({ trace: { stage: 'derp-close', socketId, endpoint: endpoint.origin, at: Date.now() } })
+        availability()
+        if (import.meta.env.TESTING)
+          self.postMessage({ trace: { stage: 'derp-close', socketId, endpoint: endpoint.origin, at: Date.now() } })
       })
     }
   }
@@ -52,6 +63,11 @@ self.onmessage = async ({ data }) => {
   const { id, action } = data
   try {
     if (action === 'start') {
+      const config = data.configuration
+      const validated = await freezeMap(new TextEncoder().encode(config.mapJSON), config.derpMapURL, {
+        expectedHash: config.derpMapSha256,
+        regionId: config.regionId,
+      })
       const loaded = new Promise<void>((ok) => {
         self.onTailcatReady = ok
       })
@@ -67,7 +83,7 @@ self.onmessage = async ({ data }) => {
       )
       await loaded
       listener = await self.tailcatListen({
-        derpMapURL: PUBLIC_DERP_MAP,
+        configuration: JSON.stringify(validated),
         onConnection: (conn) => {
           if (conn.port !== 1 || connection) {
             conn.close()
